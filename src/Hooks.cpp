@@ -120,11 +120,62 @@ namespace LoadScreen
 
 	void InstallHooks()
 	{
-		REL::Relocation<std::uintptr_t> target{ RELOCATION_ID(51048, 51929), OFFSET(0x384, 0x27B) };
+		REL::Relocation<std::uintptr_t> target{ RELOCATION_ID(51048, 51929), OFFSET_3(0x384, 0x27B, 0x394) };
 		stl::write_thunk_call<GetLoadScreenModel>(target.address());
 
-		REL::Relocation<std::uintptr_t> target2{ RELOCATION_ID(51454, 52313), OFFSET(0x1D1, 0x1C3) };
+		REL::Relocation<std::uintptr_t> target2{ RELOCATION_ID(51454, 52313), OFFSET_3(0x1D1, 0x1C3, 0x210) };
 		stl::write_thunk_call<InitLoadScreen3D>(target2.address());
+	}
+}
+
+namespace VRTFCFix
+{
+	// `tfc` (toggle free camera) crashes in VR. The VR build of PlayerCamera::ToggleFreeCameraMode
+	// (id 49876) emits broken code at +0x48..+0x6b: it never loads a base register for the
+	// FreeCameraState, so the three position stores target absolute addresses 0x30/0x34/0x38 and
+	// it passes RCX=0 to the following call (FUN_140848880). The FreeCameraState lives at [RBX+0xD8].
+	// Reimplement the position writes against [RBX+0xD8] and restore RCX before resuming at +0x6b.
+	//
+	// Verified in SkyrimVR.exe (1.4.15) @ 0x140876880: position = ([rsp+0x20], [rsp+0x24], [rsp+0x28]).
+	struct Patch : Xbyak::CodeGenerator
+	{
+		explicit Patch(std::uintptr_t a_rtn)
+		{
+			Xbyak::Label retLab;
+
+			mov(rdi, qword[rbx + 0xd8]);     // rdi = FreeCameraState
+			movss(dword[rdi + 0x30], xmm0);  // Position.x = xmm0 (already [rsp+0x20])
+			mov(rcx, rdi);                   // restore RCX = FreeCameraState for the call at +0x6b
+			movss(xmm1, dword[rsp + 0x24]);
+			movss(dword[rdi + 0x34], xmm1);  // Position.y = [rsp+0x24]
+			movss(xmm0, dword[rsp + 0x28]);
+			movss(dword[rdi + 0x38], xmm0);  // Position.z = [rsp+0x28]
+
+			jmp(ptr[rip + retLab]);
+			L(retLab);
+			dq(a_rtn);
+		}
+	};
+
+	void InstallHooks()
+	{
+		static REL::Relocation<std::uintptr_t> target{ RELOCATION_ID(49876, 0), OFFSET(0x48, 0) };
+		static REL::Relocation<std::uintptr_t> resume{ RELOCATION_ID(49876, 0), OFFSET(0x6b, 0) };
+
+		const auto instructionBytes = resume.address() - target.address();
+		for (std::size_t i = 0; i < instructionBytes; i++) {
+			REL::safe_write(target.address() + i, REL::NOP);
+		}
+
+		Patch p{ resume.address() };
+		p.ready();
+
+		SKSE::AllocTrampoline(128);
+		auto& trampoline = SKSE::GetTrampoline();
+		trampoline.write_branch<5>(
+			target.address(),
+			trampoline.allocate(p));
+		logger::info("\t\tInstalled VR tfc fix; overwrote {} bytes at {:x}"sv, instructionBytes, target.address());
 	}
 }
 
@@ -133,4 +184,8 @@ void Hooks::Install()
 	PhotoMode::InstallHooks();
 	Screenshot::InstallHooks();
 	LoadScreen::InstallHooks();
+
+	if (stl::IsVR()) {
+		VRTFCFix::InstallHooks();
+	}
 }

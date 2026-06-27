@@ -177,7 +177,11 @@ namespace Screenshot
 
 		auto mcmIndex = index;
 		auto photosIndex = get_photos_index();
+#ifdef SKYRIMVR
+		auto vanillaScreenshotIndex = RE::GetINISetting("iScreenShotIndex:Display")->GetInteger();
+#else
 		auto vanillaScreenshotIndex = RE::GetINISetting("iScreenShotIndex:Display")->GetSInt();
+#endif
 		auto screenshotsIndex = screenshots.GetHighestIndex();
 		auto paintingsIndex = paintings.GetHighestIndex();
 
@@ -234,9 +238,9 @@ namespace Screenshot
 		// capture screenshot
 		DirectX::ScratchImage inputImage{};
 
-		const ComPtr<ID3D11Device>        device{ reinterpret_cast<ID3D11Device*>(renderer->data.forwarder) };
-		const ComPtr<ID3D11DeviceContext> deviceContext{ reinterpret_cast<ID3D11DeviceContext*>(renderer->data.context) };
-		ID3D11Texture2D*                  texture2D{ renderer->data.renderTargets[RE::RENDER_TARGET::kSCREENSHOT].texture };
+		const ComPtr<ID3D11Device>        device{ reinterpret_cast<ID3D11Device*>(RENDERER_DATA(renderer).forwarder) };
+		const ComPtr<ID3D11DeviceContext> deviceContext{ reinterpret_cast<ID3D11DeviceContext*>(RENDERER_DATA(renderer).context) };
+		ID3D11Texture2D*                  texture2D{ RENDERER_DATA(renderer).renderTargets[RE::RENDER_TARGET::kSCREENSHOT].texture };
 
 		if (auto result = DirectX::CaptureTexture(device.Get(), deviceContext.Get(), texture2D, inputImage); result == S_OK) {
 			skipVanillaScreenshot = true;

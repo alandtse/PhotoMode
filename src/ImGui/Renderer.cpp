@@ -39,7 +39,7 @@ namespace ImGui::Renderer
 			func();
 
 			if (const auto renderer = RE::BSGraphics::Renderer::GetSingleton()) {
-				const auto swapChain = reinterpret_cast<IDXGISwapChain*>(renderer->data.renderWindows[0].swapChain);
+				const auto swapChain = reinterpret_cast<IDXGISwapChain*>(RENDERER_DATA(renderer).renderWindows[0].swapChain);
 				if (!swapChain) {
 					logger::error("couldn't find swapChain");
 					return;
@@ -51,8 +51,8 @@ namespace ImGui::Renderer
 					return;
 				}
 
-				const auto device = reinterpret_cast<ID3D11Device*>(renderer->data.forwarder);
-				const auto context = reinterpret_cast<ID3D11DeviceContext*>(renderer->data.context);
+				const auto device = reinterpret_cast<ID3D11Device*>(RENDERER_DATA(renderer).forwarder);
+				const auto context = reinterpret_cast<ID3D11DeviceContext*>(RENDERER_DATA(renderer).context);
 
 				logger::info("Initializing ImGui..."sv);
 
@@ -181,7 +181,7 @@ namespace ImGui::Renderer
 		REL::Relocation<std::uintptr_t> target{ RELOCATION_ID(75595, 77226), OFFSET(0x9, 0x275) };  // BSGraphics::InitD3D
 		stl::write_thunk_call<CreateD3DAndSwapChain>(target.address());
 
-		REL::Relocation<std::uintptr_t> target2{ RELOCATION_ID(75461, 77246), 0x9 };  // BSGraphics::Renderer::End
+		REL::Relocation<std::uintptr_t> target2{ RELOCATION_ID(75461, 77246), OFFSET_3(0x9, 0x9, 0x15) };  // BSGraphics::Renderer::End
 		stl::write_thunk_call<StopTimer>(target2.address());
 
 		stl::write_vfunc<RE::HUDMenu, PostDisplay>();

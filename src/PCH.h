@@ -139,12 +139,38 @@ namespace stl
 
 		T::func = reinterpret_cast<std::uintptr_t>(alloc);
 	}
+
+	inline bool IsVR()
+	{
+#if defined(SKYRIMVR)
+		return true;
+#elif defined(SKYRIM_SUPPORT_VR)
+		return REL::Module::IsVR();
+#else
+		return false;
+#endif
+	}
 }
 
-#ifdef SKYRIM_AE
+// SE/AE compute the offset at compile time; the VR build is a CommonLibSSE-NG DLL
+// and resolves the variant at load time. OFFSET_3 supplies a distinct VR byte offset.
+#if defined(SKYRIMVR)
+#	define OFFSET(se, ae) REL::VariantOffset(se, ae, se)
+#	define OFFSET_3(se, ae, vr) REL::VariantOffset(se, ae, vr)
+#elif defined(SKYRIM_AE)
 #	define OFFSET(se, ae) ae
+#	define OFFSET_3(se, ae, vr) ae
 #else
 #	define OFFSET(se, ae) se
+#	define OFFSET_3(se, ae, vr) se
+#endif
+
+// BSGraphics::Renderer runtime data: powerof3 CommonLibSSE exposes a `data` member;
+// CommonLibSSE-NG (VR build) exposes it through GetRuntimeData().
+#if defined(SKYRIMVR)
+#	define RENDERER_DATA(a_renderer) (a_renderer)->GetRuntimeData()
+#else
+#	define RENDERER_DATA(a_renderer) (a_renderer)->data
 #endif
 
 #include "Cache.h"

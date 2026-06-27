@@ -45,7 +45,45 @@ void OnInit(SKSE::MessagingInterface::Message* a_msg)
 	}
 }
 
-#ifdef SKYRIM_AE
+#if defined(SKYRIM_SUPPORT_VR) || defined(COMMONLIBSSE_NG)
+// CommonLibSSE-NG build (VR): advertise all supported runtimes and gate at query time.
+extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []() {
+	SKSE::PluginVersionData v;
+	v.PluginVersion(Version::MAJOR);
+	v.PluginName("PhotoMode");
+	v.AuthorName("powerofthree");
+	v.UsesAddressLibrary();
+	v.UsesUpdatedStructs();
+	v.CompatibleVersions({ SKSE::RUNTIME_SSE_1_5_97, SKSE::RUNTIME_SSE_LATEST, SKSE::RUNTIME_VR_1_4_15 });
+
+	return v;
+}();
+
+extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a_skse, SKSE::PluginInfo* a_info)
+{
+	a_info->infoVersion = SKSE::PluginInfo::kVersion;
+	a_info->name = "PhotoMode";
+	a_info->version = Version::MAJOR;
+
+	if (a_skse->IsEditor()) {
+		logger::critical("Loaded in editor, marking as incompatible"sv);
+		return false;
+	}
+
+	const auto ver = a_skse->RuntimeVersion();
+	if (ver.major() == 1 && ver.minor() == 4) {  // VR
+		if (ver < SKSE::RUNTIME_VR_1_4_15) {
+			logger::critical(FMT_STRING("Unsupported VR runtime version {}"), ver.string());
+			return false;
+		}
+	} else if (ver < SKSE::RUNTIME_SSE_1_5_39) {
+		logger::critical(FMT_STRING("Unsupported runtime version {}"), ver.string());
+		return false;
+	}
+
+	return true;
+}
+#elif defined(SKYRIM_AE)
 extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []() {
 	SKSE::PluginVersionData v;
 	v.PluginVersion(Version::MAJOR);

@@ -13,6 +13,7 @@ SKSE plugin that adds photomode for Skyrim Special Edition
 * [CommonLibSSE](https://github.com/powerof3/CommonLibSSE/tree/dev)
 	* You need to build from the powerof3/dev branch
 	* Add this as as an environment variable `CommonLibSSEPath`
+	* The VR target instead builds against [CommonLibVR (NG)](https://github.com/alandtse/CommonLibVR) from `extern/CommonLibVR`
 
 ## Register Visual Studio as a Generator
 * Open `x64 Native Tools Command Prompt`
@@ -38,6 +39,13 @@ cmake --build build --config Release
 ```
 cmake --preset vs2022-windows-vcpkg-ae
 cmake --build buildae --config Release
+```
+### VR
+```
+# openvr is a submodule of CommonLibVR
+git submodule update --init --recursive
+cmake --preset vs2022-windows-vcpkg-vr
+cmake --build buildvr --config Release
 ```
 ## License
 [MIT](LICENSE)
