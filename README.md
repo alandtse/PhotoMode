@@ -10,10 +10,9 @@ SKSE plugin that adds photomode for Skyrim Special Edition
 	* Add the environment variable `VCPKG_ROOT` with the value as the path to the folder containing vcpkg
 * [Visual Studio Community 2022](https://visualstudio.microsoft.com/)
 	* Desktop development with C++
-* [CommonLibSSE](https://github.com/powerof3/CommonLibSSE/tree/dev)
-	* You need to build from the powerof3/dev branch
-	* Add this as as an environment variable `CommonLibSSEPath`
-	* The VR target instead builds against [CommonLibVR (NG)](https://github.com/alandtse/CommonLibVR) from `extern/CommonLibVR`
+* [CommonLibVR (CommonLibSSE-NG)](https://github.com/alandtse/CommonLibVR)
+	* All targets (SSE/AE/VR) build against the NG library bundled at `extern/CommonLibVR`
+	* SSE and AE are single-runtime builds; VR is a full cross-runtime build
 
 ## Register Visual Studio as a Generator
 * Open `x64 Native Tools Command Prompt`

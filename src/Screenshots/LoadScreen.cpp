@@ -136,11 +136,7 @@ namespace LoadScreen
 			return;
 		}
 
-#ifdef SKYRIMVR
 		const auto effect = a_canvas->GetGeometryRuntimeData().shaderProperty;
-#else
-		const auto effect = a_canvas->properties[RE::BSGeometry::States::kEffect];
-#endif
 		if (!effect) {
 			return;
 		}

@@ -33,10 +33,19 @@ macro(find_commonlib_path)
 endmacro()
 
 set_from_environment(VCPKG_ROOT)
+# Every target builds against CommonLibSSE-NG (alandtse/CommonLibVR) so the code can
+# use NG runtime-data accessors uniformly. The NG CMake target is named "CommonLibSSE"
+# for all runtimes. SE and AE are single-runtime builds; VR is full cross-runtime.
+set(CommonLibName "CommonLibSSE")
+set(CommonLibPath "${CMAKE_CURRENT_SOURCE_DIR}/extern/CommonLibVR")
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+
 if(BUILD_SKYRIMAE)
 	add_compile_definitions(SKYRIM_AE)
 	add_compile_definitions(SKYRIM_SUPPORT_AE)
-	set(CommonLibName "CommonLibSSE")
+	set(ENABLE_SKYRIM_SE OFF CACHE BOOL "" FORCE)
+	set(ENABLE_SKYRIM_AE ON CACHE BOOL "" FORCE)
+	set(ENABLE_SKYRIM_VR OFF CACHE BOOL "" FORCE)
 	set_from_environment(SkyrimAEPath)
 	set(SkyrimPath ${SkyrimAEPath})
 	set(SkyrimVersion "Skyrim AE")
@@ -44,13 +53,8 @@ if(BUILD_SKYRIMAE)
 elseif(BUILD_SKYRIMVR)
 	add_compile_definitions(SKYRIMVR)
 	add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
-	# Build the VR target as a full cross-runtime CommonLibSSE-NG DLL
-	# (alandtse/CommonLibVR). Enabling all three runtimes selects SKYRIM_CROSS_VR
-	# and defines COMMONLIBSSE_NG, so runtime detection and the NG plugin-entry
-	# path behave canonically. The NG CMake target is named "CommonLibSSE".
-	set(CommonLibName "CommonLibSSE")
-	set(CommonLibPath "${CMAKE_CURRENT_SOURCE_DIR}/extern/CommonLibVR")
-	set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+	# Full cross-runtime build (SKYRIM_CROSS_VR) so COMMONLIBSSE_NG is defined and
+	# runtime detection / the NG plugin-entry path behave canonically.
 	set(ENABLE_SKYRIM_SE ON CACHE BOOL "" FORCE)
 	set(ENABLE_SKYRIM_AE ON CACHE BOOL "" FORCE)
 	set(ENABLE_SKYRIM_VR ON CACHE BOOL "" FORCE)
@@ -59,7 +63,9 @@ elseif(BUILD_SKYRIMVR)
 	set(SkyrimVersion "Skyrim VR")
 	set(VERSION ${VERSION}.${VR_VERSION})
 else()
-	set(CommonLibName "CommonLibSSE")
+	set(ENABLE_SKYRIM_SE ON CACHE BOOL "" FORCE)
+	set(ENABLE_SKYRIM_AE OFF CACHE BOOL "" FORCE)
+	set(ENABLE_SKYRIM_VR OFF CACHE BOOL "" FORCE)
 	set_from_environment(Skyrim64Path)
 	set(SkyrimPath ${Skyrim64Path})
 	set(SkyrimVersion "Skyrim SSE")

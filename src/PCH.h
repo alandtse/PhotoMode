@@ -165,35 +165,24 @@ namespace stl
 #	define OFFSET_3(se, ae, vr) se
 #endif
 
-// BSGraphics::Renderer runtime data: powerof3 CommonLibSSE exposes a `data` member;
-// CommonLibSSE-NG (VR build) exposes it through GetRuntimeData().
-#if defined(SKYRIMVR)
-#	define RENDERER_DATA(a_renderer) (a_renderer)->GetRuntimeData()
-#else
-#	define RENDERER_DATA(a_renderer) (a_renderer)->data
-#endif
+// All targets build against CommonLibSSE-NG, so engine fields that NG keeps in
+// RUNTIME_DATA blocks are reached through its runtime-detecting accessors. These
+// aliases name the accessor for each struct PhotoMode touches.
+#define RENDERER_DATA(a_obj)    (a_obj)->GetRuntimeData()
+#define MAIN_DATA(a_obj)        (a_obj)->GetRuntimeData()
+#define ACTOR_DATA(a_obj)       (a_obj)->GetActorRuntimeData()
+#define CAMERA_DATA(a_obj)      (a_obj)->GetRuntimeData2()    // worldFOV etc.
+#define MISTMENU_DATA(a_obj)    (a_obj)->GetRuntimeData()
+#define PLAYER_GAMESTATE(a_obj) (a_obj)->GetGameStatsData()   // byCharGenFlag etc.
+#define CONTROLMAP_DATA(a_obj)  (a_obj)->GetRuntimeData()
+#define JOURNALMENU_DATA(a_obj) (a_obj)->GetRuntimeData()
 
-// powerof3 CommonLibSSE exposes these engine fields as direct members; CommonLibSSE-NG
-// keeps them in RUNTIME_DATA blocks that are stripped under SKYRIM_CROSS_VR, so the VR
-// build reaches them through the matching accessor instead.
+// ImageSpaceManager is the exception: NG's GetRuntimeData() carries no VR offset, so VR
+// must use the dedicated GetVRRuntimeData() accessor.
 #if defined(SKYRIMVR)
-#	define MAIN_DATA(a_obj)        (a_obj)->GetRuntimeData()
-#	define ACTOR_DATA(a_obj)       (a_obj)->GetActorRuntimeData()
-#	define CAMERA_DATA(a_obj)      (a_obj)->GetRuntimeData2()  // worldFOV etc.
-#	define MISTMENU_DATA(a_obj)    (a_obj)->GetRuntimeData()
-#	define IMAGESPACE_DATA(a_obj)  (a_obj)->GetVRRuntimeData()
-#	define PLAYER_GAMESTATE(a_obj) (a_obj)->GetGameStatsData()  // byCharGenFlag etc.
-#	define CONTROLMAP_DATA(a_obj)  (a_obj)->GetRuntimeData()
-#	define JOURNALMENU_DATA(a_obj) (a_obj)->GetRuntimeData()
+#	define IMAGESPACE_DATA(a_obj) (a_obj)->GetVRRuntimeData()
 #else
-#	define MAIN_DATA(a_obj)        (*(a_obj))
-#	define ACTOR_DATA(a_obj)       (*(a_obj))
-#	define CAMERA_DATA(a_obj)      (*(a_obj))
-#	define MISTMENU_DATA(a_obj)    (*(a_obj))
-#	define IMAGESPACE_DATA(a_obj)  (*(a_obj))
-#	define PLAYER_GAMESTATE(a_obj) (*(a_obj))
-#	define CONTROLMAP_DATA(a_obj)  (*(a_obj))
-#	define JOURNALMENU_DATA(a_obj) (*(a_obj))
+#	define IMAGESPACE_DATA(a_obj) (a_obj)->GetRuntimeData()
 #endif
 
 #include "Cache.h"

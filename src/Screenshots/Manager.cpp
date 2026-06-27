@@ -177,11 +177,7 @@ namespace Screenshot
 
 		auto mcmIndex = index;
 		auto photosIndex = get_photos_index();
-#ifdef SKYRIMVR
 		auto vanillaScreenshotIndex = RE::GetINISetting("iScreenShotIndex:Display")->GetInteger();
-#else
-		auto vanillaScreenshotIndex = RE::GetINISetting("iScreenShotIndex:Display")->GetSInt();
-#endif
 		auto screenshotsIndex = screenshots.GetHighestIndex();
 		auto paintingsIndex = paintings.GetHighestIndex();
 
