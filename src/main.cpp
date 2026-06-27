@@ -51,8 +51,10 @@ void OnInit(SKSE::MessagingInterface::Message* a_msg)
 	}
 }
 
-#if defined(SKYRIM_SUPPORT_VR) || defined(COMMONLIBSSE_NG)
+#if defined(SKYRIMVR) || defined(SKYRIM_SUPPORT_VR) || defined(COMMONLIBSSE_NG)
 // CommonLibSSE-NG build (VR): advertise all supported runtimes and gate at query time.
+// A VR-only NG build defines SKYRIMVR but not COMMONLIBSSE_NG, so gate on it too —
+// otherwise this falls through to the SSE branch and rejects VR 1.4.15 as < 1.5.39.
 extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []() {
 	SKSE::PluginVersionData v;
 	v.PluginVersion(Version::MAJOR);
