@@ -1,6 +1,7 @@
 #include "Console.h"
 #include "Hooks.h"
 #include "ImGui/Renderer.h"
+#include "ImGui/VRHelper.h"
 #include "Input.h"
 #include "Papyrus.h"
 #include "PhotoMode/Manager.h"
@@ -17,6 +18,11 @@ void OnInit(SKSE::MessagingInterface::Message* a_msg)
 			logger::info("{:*^30}", "POST LOAD");
 
 			Hooks::Install();
+		}
+		break;
+	case SKSE::MessagingInterface::kPostPostLoad:
+		{
+			ImGui::Renderer::VR::Connect();
 		}
 		break;
 	case SKSE::MessagingInterface::kInputLoaded:

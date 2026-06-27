@@ -1,6 +1,7 @@
 #include "Renderer.h"
 #include "IconsFonts.h"
 #include "Styles.h"
+#include "VRHelper.h"
 
 #include "PhotoMode/Manager.h"
 
@@ -102,6 +103,9 @@ namespace ImGui::Renderer
 
 			const auto photoMode = MANAGER(PhotoMode);
 
+			// VR: reconcile panel focus and pump controller input every frame (no-op on flat).
+			VR::Update(photoMode->IsActive());
+
 			if (!photoMode->IsActive() || !photoMode->OnFrameUpdate()) {
 				return func(a_menu);
 			}
@@ -128,7 +132,7 @@ namespace ImGui::Renderer
 			}
 			ImGui::EndFrame();
 			ImGui::Render();
-			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+			VR::RenderFrame();
 
 			return func(a_menu);
 		}
@@ -171,7 +175,7 @@ namespace ImGui::Renderer
 			}
 			ImGui::EndFrame();
 			ImGui::Render();
-			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+			VR::RenderFrame();
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};

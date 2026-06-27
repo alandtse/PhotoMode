@@ -8,6 +8,7 @@ set(sources ${sources}
 	src/ImGui/Renderer.cpp
 	src/ImGui/Styles.cpp
 	src/ImGui/Util.cpp
+	src/ImGui/VRHelper.cpp
 	src/ImGui/Widgets.cpp
 	src/Input.cpp
 	src/PCH.cpp

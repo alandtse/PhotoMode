@@ -11,6 +11,7 @@ set(headers ${headers}
 	src/ImGui/Renderer.h
 	src/ImGui/Styles.h
 	src/ImGui/Util.h
+	src/ImGui/VRHelper.h
 	src/ImGui/Widgets.h
 	src/Input.h
 	src/PCH.h

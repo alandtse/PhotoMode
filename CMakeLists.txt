@@ -221,6 +221,27 @@ target_precompile_headers(
 		src/PCH.h
 )
 
+# VR renders its ImGui through the ImGuiVRHelper plugin (header-only client SDK).
+if(BUILD_SKYRIMVR)
+	include(FetchContent)
+	FetchContent_Declare(
+		ImGuiVRHelper
+		GIT_REPOSITORY https://github.com/alandtse/imgui-vr-helper.git
+		GIT_TAG        v1.1.0
+		GIT_SUBMODULES ""
+		SOURCE_SUBDIR  api
+	)
+	FetchContent_MakeAvailable(ImGuiVRHelper)
+
+	find_package(nlohmann_json CONFIG REQUIRED)
+	target_link_libraries(
+		${PROJECT_NAME}
+		PRIVATE
+			ImGuiVRHelper::api
+			nlohmann_json::nlohmann_json
+	)
+endif()
+
 if (MSVC)
 	target_compile_options(
 		${PROJECT_NAME}
