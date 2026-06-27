@@ -1,16 +1,10 @@
 #include "ImGui/VRHelper.h"
 
-#ifdef SKYRIMVR
-#	include "ImGuiVRHelperClientSDK.h"
-#	include "Version.h"
-#else
-#	include <imgui.h>
-#	include <imgui_impl_dx11.h>
-#endif
+#include "ImGuiVRHelperClientSDK.h"
+#include "Version.h"
 
 namespace ImGui::Renderer::VR
 {
-#ifdef SKYRIMVR
 	namespace
 	{
 		ImGuiVRHelperPluginAPI::Client g_vrClient;
@@ -18,6 +12,9 @@ namespace ImGui::Renderer::VR
 
 	void Connect()
 	{
+		if (!REL::Module::IsVR()) {
+			return;  // flat screen renders ImGui directly; no helper needed
+		}
 		// RendersOnFocus: an interactive, navigable menu (not a passive HUD layer).
 		if (g_vrClient.Connect("PhotoMode", Version::NAME.data(), ImGuiVRHelperPluginAPI::kClientFlag_RendersOnFocus)) {
 			logger::info("Connected to ImGuiVRHelper"sv);
@@ -27,12 +24,8 @@ namespace ImGui::Renderer::VR
 	}
 
 	void Update(bool a_menuOpen) { g_vrClient.Update(a_menuOpen); }
+	// When not connected (flat screen / helper absent) RenderFrame() falls back to the
+	// normal ImGui_ImplDX11 present, so the desktop path is unchanged.
 	void RenderFrame() { g_vrClient.RenderFrame(); }
 	bool IsConnected() { return g_vrClient.IsConnected(); }
-#else
-	void Connect() {}
-	void Update(bool) {}
-	void RenderFrame() { ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData()); }
-	bool IsConnected() { return false; }
-#endif
 }

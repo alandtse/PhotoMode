@@ -20,31 +20,17 @@ SKSE plugin that adds photomode for Skyrim Special Edition
 * Close the cmd window
 
 ## Building
-```
-git clone https://github.com/powerof3/PhotoMode.git
-cd PhotoMode
-# pull commonlib /extern to override the path settings
-git submodule init
-# to update submodules to checked in build
-git submodule update
-```
 
-### SSE
+A single cross-runtime build produces one DLL that runs on Skyrim SE, AE and VR.
+
 ```
-cmake --preset vs2022-windows-vcpkg-se
-cmake --build build --config Release
-```
-### AE
-```
-cmake --preset vs2022-windows-vcpkg-ae
-cmake --build buildae --config Release
-```
-### VR
-```
+git clone https://github.com/alandtse/PhotoMode.git
+cd PhotoMode
 # openvr is a submodule of CommonLibVR
 git submodule update --init --recursive
-cmake --preset vs2022-windows-vcpkg-vr
-cmake --build buildvr --config Release
+cmake --preset vs2022-windows-vcpkg
+cmake --build build --config Release
 ```
+
 ## License
 [MIT](LICENSE)

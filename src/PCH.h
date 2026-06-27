@@ -142,32 +142,28 @@ namespace stl
 
 	inline bool IsVR()
 	{
-#if defined(SKYRIMVR)
-		return true;
-#elif defined(SKYRIM_SUPPORT_VR)
 		return REL::Module::IsVR();
-#else
-		return false;
-#endif
+	}
+
+	// ImageSpaceManager runtime data: NG splits it into SE/AE vs VR structs and its non-VR
+	// GetRuntimeData() carries no VR offset, so each access must pick the runtime-correct one.
+	[[nodiscard]] inline RE::ImageSpaceBaseData*& imagespace_current(RE::ImageSpaceManager* a_mgr)
+	{
+		return REL::Module::IsVR() ? a_mgr->GetVRRuntimeData().currentBaseData : a_mgr->GetRuntimeData().currentBaseData;
+	}
+	[[nodiscard]] inline RE::ImageSpaceBaseData*& imagespace_override(RE::ImageSpaceManager* a_mgr)
+	{
+		return REL::Module::IsVR() ? a_mgr->GetVRRuntimeData().overrideBaseData : a_mgr->GetRuntimeData().overrideBaseData;
 	}
 }
 
-// SE/AE compute the offset at compile time; the VR build is a CommonLibSSE-NG DLL
-// and resolves the variant at load time. OFFSET_3 supplies a distinct VR byte offset.
-#if defined(SKYRIMVR)
-#	define OFFSET(se, ae) REL::VariantOffset(se, ae, se)
-#	define OFFSET_3(se, ae, vr) REL::VariantOffset(se, ae, vr)
-#elif defined(SKYRIM_AE)
-#	define OFFSET(se, ae) ae
-#	define OFFSET_3(se, ae, vr) ae
-#else
-#	define OFFSET(se, ae) se
-#	define OFFSET_3(se, ae, vr) se
-#endif
+// Single cross-runtime CommonLibSSE-NG DLL: offsets and engine fields resolve at load time.
+// OFFSET_3 supplies a distinct VR byte offset; OFFSET defaults VR to the SE value.
+#define OFFSET(se, ae) REL::VariantOffset(se, ae, se)
+#define OFFSET_3(se, ae, vr) REL::VariantOffset(se, ae, vr)
 
-// All targets build against CommonLibSSE-NG, so engine fields that NG keeps in
-// RUNTIME_DATA blocks are reached through its runtime-detecting accessors. These
-// aliases name the accessor for each struct PhotoMode touches.
+// Engine fields that NG keeps in RUNTIME_DATA blocks are reached through its
+// runtime-detecting accessors. These aliases name the accessor for each struct.
 #define RENDERER_DATA(a_obj)    (a_obj)->GetRuntimeData()
 #define MAIN_DATA(a_obj)        (a_obj)->GetRuntimeData()
 #define ACTOR_DATA(a_obj)       (a_obj)->GetActorRuntimeData()
@@ -176,14 +172,6 @@ namespace stl
 #define PLAYER_GAMESTATE(a_obj) (a_obj)->GetGameStatsData()   // byCharGenFlag etc.
 #define CONTROLMAP_DATA(a_obj)  (a_obj)->GetRuntimeData()
 #define JOURNALMENU_DATA(a_obj) (a_obj)->GetRuntimeData()
-
-// ImageSpaceManager is the exception: NG's GetRuntimeData() carries no VR offset, so VR
-// must use the dedicated GetVRRuntimeData() accessor.
-#if defined(SKYRIMVR)
-#	define IMAGESPACE_DATA(a_obj) (a_obj)->GetVRRuntimeData()
-#else
-#	define IMAGESPACE_DATA(a_obj) (a_obj)->GetRuntimeData()
-#endif
 
 #include "Cache.h"
 #include "Translation.h"

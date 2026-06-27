@@ -6,26 +6,24 @@ namespace PhotoMode
 	{
 		imods.InitForms();
 
-		const auto  IMGS = RE::ImageSpaceManager::GetSingleton();
-		auto&       imgs = IMAGESPACE_DATA(IMGS);
-		if (imgs.currentBaseData) {
-			imageSpaceData = *imgs.currentBaseData;
+		const auto IMGS = RE::ImageSpaceManager::GetSingleton();
+		if (const auto current = stl::imagespace_current(IMGS)) {
+			imageSpaceData = *current;
 		}
-		imgs.overrideBaseData = &imageSpaceData;
+		stl::imagespace_override(IMGS) = &imageSpaceData;
 	}
 
 	void Filters::RevertState(bool a_fullReset)
 	{
 		// reset imagespace
-		const auto  IMGS = RE::ImageSpaceManager::GetSingleton();
-		auto&       imgs = IMAGESPACE_DATA(IMGS);
+		const auto IMGS = RE::ImageSpaceManager::GetSingleton();
 		if (a_fullReset) {
-			imgs.overrideBaseData = nullptr;
-		} else if (imgs.overrideBaseData) {
-			if (imgs.currentBaseData) {
-				imageSpaceData = *imgs.currentBaseData;
+			stl::imagespace_override(IMGS) = nullptr;
+		} else if (stl::imagespace_override(IMGS)) {
+			if (const auto current = stl::imagespace_current(IMGS)) {
+				imageSpaceData = *current;
 			}
-			imgs.overrideBaseData = &imageSpaceData;
+			stl::imagespace_override(IMGS) = &imageSpaceData;
 		}
 
 		// reset imod
@@ -41,7 +39,7 @@ namespace PhotoMode
 
 	void Filters::Draw()
 	{
-		if (const auto& overrideData = IMAGESPACE_DATA(RE::ImageSpaceManager::GetSingleton()).overrideBaseData) {
+		if (const auto& overrideData = stl::imagespace_override(RE::ImageSpaceManager::GetSingleton())) {
 			ImGui::Slider("$PM_Brightness"_T, &overrideData->cinematic.brightness, 0.0f, 3.0f, nullptr, ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput);
 			ImGui::Slider("$PM_Saturation"_T, &overrideData->cinematic.saturation, 0.0f, 3.0f);
 			ImGui::Slider("$PM_Contrast"_T, &overrideData->cinematic.contrast, 0.0f, 3.0f);
@@ -55,7 +53,7 @@ namespace PhotoMode
 			}
 			ImGui::Unindent();
 		} else {
-			IMAGESPACE_DATA(RE::ImageSpaceManager::GetSingleton()).overrideBaseData = &imageSpaceData;
+			stl::imagespace_override(RE::ImageSpaceManager::GetSingleton()) = &imageSpaceData;
 		}
 
 		imods.GetFormResultFromCombo([&](const auto& imod) {

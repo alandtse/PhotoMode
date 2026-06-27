@@ -1,14 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 set(NAME "po3_PhotoMode" CACHE STRING "")
 set(VERSION 2.0.3 CACHE STRING "")
-set(AE_VERSION 1)
-set(VR_VERSION 1)
 
 # ---- Options ----
 
-option(COPY_BUILD "Copy the build output to the Skyrim directory." TRUE)
-option(BUILD_SKYRIMVR "Build for Skyrim VR" OFF)
-option(BUILD_SKYRIMAE "Build for Skyrim AE" OFF)
+option(COPY_BUILD "Copy the build output to the Skyrim directories." TRUE)
 
 # ---- Cache build vars ----
 
@@ -33,47 +29,26 @@ macro(find_commonlib_path)
 endmacro()
 
 set_from_environment(VCPKG_ROOT)
-# Every target builds against CommonLibSSE-NG (alandtse/CommonLibVR) so the code can
-# use NG runtime-data accessors uniformly. The NG CMake target is named "CommonLibSSE"
-# for all runtimes. SE and AE are single-runtime builds; VR is full cross-runtime.
+
+# One cross-runtime CommonLibSSE-NG DLL (alandtse/CommonLibVR) for Skyrim SE, AE and VR.
+# Enabling all three runtimes selects SKYRIM_CROSS_VR and defines COMMONLIBSSE_NG, so the
+# code resolves addresses and engine struct layouts per game version at load time. The NG
+# CMake target is named "CommonLibSSE".
+add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 set(CommonLibName "CommonLibSSE")
 set(CommonLibPath "${CMAKE_CURRENT_SOURCE_DIR}/extern/CommonLibVR")
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-
-if(BUILD_SKYRIMAE)
-	add_compile_definitions(SKYRIM_AE)
-	add_compile_definitions(SKYRIM_SUPPORT_AE)
-	set(ENABLE_SKYRIM_SE OFF CACHE BOOL "" FORCE)
-	set(ENABLE_SKYRIM_AE ON CACHE BOOL "" FORCE)
-	set(ENABLE_SKYRIM_VR OFF CACHE BOOL "" FORCE)
-	set_from_environment(SkyrimAEPath)
-	set(SkyrimPath ${SkyrimAEPath})
-	set(SkyrimVersion "Skyrim AE")
-	set(VERSION ${VERSION}.${AE_VERSION})
-elseif(BUILD_SKYRIMVR)
-	add_compile_definitions(SKYRIMVR)
-	add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
-	# Full cross-runtime build (SKYRIM_CROSS_VR) so COMMONLIBSSE_NG is defined and
-	# runtime detection / the NG plugin-entry path behave canonically.
-	set(ENABLE_SKYRIM_SE ON CACHE BOOL "" FORCE)
-	set(ENABLE_SKYRIM_AE ON CACHE BOOL "" FORCE)
-	set(ENABLE_SKYRIM_VR ON CACHE BOOL "" FORCE)
-	set_from_environment(SkyrimVRPath)
-	set(SkyrimPath ${SkyrimVRPath})
-	set(SkyrimVersion "Skyrim VR")
-	set(VERSION ${VERSION}.${VR_VERSION})
-else()
-	set(ENABLE_SKYRIM_SE ON CACHE BOOL "" FORCE)
-	set(ENABLE_SKYRIM_AE OFF CACHE BOOL "" FORCE)
-	set(ENABLE_SKYRIM_VR OFF CACHE BOOL "" FORCE)
-	set_from_environment(Skyrim64Path)
-	set(SkyrimPath ${Skyrim64Path})
-	set(SkyrimVersion "Skyrim SSE")
-endif()
+set(ENABLE_SKYRIM_SE ON CACHE BOOL "" FORCE)
+set(ENABLE_SKYRIM_AE ON CACHE BOOL "" FORCE)
+set(ENABLE_SKYRIM_VR ON CACHE BOOL "" FORCE)
+set(SkyrimVersion "Skyrim SE/AE/VR")
+set_from_environment(Skyrim64Path)
+set_from_environment(SkyrimAEPath)
+set_from_environment(SkyrimVRPath)
 find_commonlib_path()
 message(
 	STATUS
-	"Building ${NAME} ${VERSION} for ${SkyrimVersion} at ${SkyrimPath} with ${CommonLibName} at ${CommonLibPath}."
+	"Building ${NAME} ${VERSION} for ${SkyrimVersion} with ${CommonLibName} at ${CommonLibPath}."
 )
 
 if (DEFINED VCPKG_ROOT)
@@ -229,26 +204,25 @@ target_precompile_headers(
 		src/PCH.h
 )
 
-# VR renders its ImGui through the ImGuiVRHelper plugin (header-only client SDK).
-if(BUILD_SKYRIMVR)
-	include(FetchContent)
-	FetchContent_Declare(
-		ImGuiVRHelper
-		GIT_REPOSITORY https://github.com/alandtse/imgui-vr-helper.git
-		GIT_TAG        v1.1.0
-		GIT_SUBMODULES ""
-		SOURCE_SUBDIR  api
-	)
-	FetchContent_MakeAvailable(ImGuiVRHelper)
+# On VR the ImGui menu renders through the ImGuiVRHelper plugin (header-only client SDK);
+# on flat screen the client is dormant and ImGui presents directly.
+include(FetchContent)
+FetchContent_Declare(
+	ImGuiVRHelper
+	GIT_REPOSITORY https://github.com/alandtse/imgui-vr-helper.git
+	GIT_TAG        v1.1.0
+	GIT_SUBMODULES ""
+	SOURCE_SUBDIR  api
+)
+FetchContent_MakeAvailable(ImGuiVRHelper)
 
-	find_package(nlohmann_json CONFIG REQUIRED)
-	target_link_libraries(
-		${PROJECT_NAME}
-		PRIVATE
-			ImGuiVRHelper::api
-			nlohmann_json::nlohmann_json
-	)
-endif()
+find_package(nlohmann_json CONFIG REQUIRED)
+target_link_libraries(
+	${PROJECT_NAME}
+	PRIVATE
+		ImGuiVRHelper::api
+		nlohmann_json::nlohmann_json
+)
 
 if (MSVC)
 	target_compile_options(
@@ -278,17 +252,20 @@ endif ()
 # ---- Post build ----
 
 if (COPY_BUILD)
-	if (DEFINED SkyrimPath)
-		add_custom_command(
-			TARGET ${PROJECT_NAME}
-			POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> ${SkyrimPath}/SKSE/Plugins/
-			COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> ${SkyrimPath}/SKSE/Plugins/
-		)
-	else ()
-		message(
-			WARNING
-			"Variable ${SkyrimPath} is not defined. Skipping post-build copy command."
-		)
+	# One DLL serves every runtime, so deploy it to each game directory that is configured.
+	set(_copied FALSE)
+	foreach (_gamePath ${Skyrim64Path} ${SkyrimAEPath} ${SkyrimVRPath})
+		if (DEFINED _gamePath AND NOT "${_gamePath}" STREQUAL "")
+			add_custom_command(
+				TARGET ${PROJECT_NAME}
+				POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> ${_gamePath}/SKSE/Plugins/
+				COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> ${_gamePath}/SKSE/Plugins/
+			)
+			set(_copied TRUE)
+		endif ()
+	endforeach ()
+	if (NOT _copied)
+		message(WARNING "No Skyrim path (Skyrim64Path/SkyrimAEPath/SkyrimVRPath) is set. Skipping post-build copy.")
 	endif ()
 endif ()
