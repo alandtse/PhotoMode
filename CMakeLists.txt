@@ -44,13 +44,15 @@ if(BUILD_SKYRIMAE)
 elseif(BUILD_SKYRIMVR)
 	add_compile_definitions(SKYRIMVR)
 	add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
-	# Build the VR target as a CommonLibSSE-NG DLL (alandtse/CommonLibVR).
-	# The NG library's CMake target is named "CommonLibSSE" regardless of runtime.
+	# Build the VR target as a full cross-runtime CommonLibSSE-NG DLL
+	# (alandtse/CommonLibVR). Enabling all three runtimes selects SKYRIM_CROSS_VR
+	# and defines COMMONLIBSSE_NG, so runtime detection and the NG plugin-entry
+	# path behave canonically. The NG CMake target is named "CommonLibSSE".
 	set(CommonLibName "CommonLibSSE")
 	set(CommonLibPath "${CMAKE_CURRENT_SOURCE_DIR}/extern/CommonLibVR")
 	set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-	set(ENABLE_SKYRIM_SE OFF CACHE BOOL "" FORCE)
-	set(ENABLE_SKYRIM_AE OFF CACHE BOOL "" FORCE)
+	set(ENABLE_SKYRIM_SE ON CACHE BOOL "" FORCE)
+	set(ENABLE_SKYRIM_AE ON CACHE BOOL "" FORCE)
 	set(ENABLE_SKYRIM_VR ON CACHE BOOL "" FORCE)
 	set_from_environment(SkyrimVRPath)
 	set(SkyrimPath ${SkyrimVRPath})

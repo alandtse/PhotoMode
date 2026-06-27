@@ -177,12 +177,12 @@ namespace Input
 			static auto gamepadDown = getKey("WorldZDown", RE::INPUT_DEVICE::kGamepad);
 
 			if (a_key == mouseUp || a_key == gamepadUp) {
-				bool released = !(a_buttonEvent->value != 0.0 || a_buttonEvent->heldDownSecs < 0.0);
+				bool released = !(a_buttonEvent->Value() != 0.0 || a_buttonEvent->HeldDuration() < 0.0);
 				freeCameraState->verticalDirection = static_cast<std::uint16_t>(!released);
 				return true;
 			}
 			if (a_key == mouseDown || a_key == gamepadDown) {
-				if (a_buttonEvent->value == 0.0 && a_buttonEvent->heldDownSecs >= 0.0) {
+				if (a_buttonEvent->Value() == 0.0 && a_buttonEvent->HeldDuration() >= 0.0) {
 					freeCameraState->verticalDirection = 0;
 				} else {
 					freeCameraState->verticalDirection = -1;
@@ -573,7 +573,7 @@ namespace Input
 
 	EventResult Manager::ProcessEvent(RE::InputEvent* const* a_evn, RE::BSTEventSource<RE::InputEvent*>*)
 	{
-		if (!a_evn || !RE::Main::GetSingleton()->gameActive) {
+		if (!a_evn || !MAIN_DATA(RE::Main::GetSingleton()).gameActive) {
 			return EventResult::kContinue;
 		}
 
@@ -665,7 +665,7 @@ namespace Input
 							} else if (hotKey == hotKeys->PreviousTabKey() && buttonEvent->IsDown()) {
 								photoMode->NavigateTab(true);
 							} else if (hotKey == hotKeys->FreezeTimeKey() && buttonEvent->IsDown()) {
-								RE::Main::GetSingleton()->freezeTime = !RE::Main::GetSingleton()->freezeTime;
+								MAIN_DATA(RE::Main::GetSingleton()).freezeTime = !MAIN_DATA(RE::Main::GetSingleton()).freezeTime;
 							} else if (hotKey == hotKeys->ResetKey()) {
 								if (buttonEvent->IsUp()) {
 									photoMode->Revert(false);

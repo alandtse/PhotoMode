@@ -88,7 +88,7 @@ namespace PhotoMode
 					freeCameraState->rotation.y = freeCameraRotation.y;
 				}
 
-				pcCamera->worldFOV = fov;
+				CAMERA_DATA(pcCamera).worldFOV = fov;
 				MANAGER(PhotoMode)->SetViewRoll(viewRoll);
 
 				auto pcCell = RE::TESForm::LookupByID<RE::TESObjectCELL>(cell.GetNumericID());
@@ -336,7 +336,7 @@ namespace PhotoMode
 			position.freeCameraRotation.y = freeCameraState->rotation.y;
 		}
 
-		position.fov = pcCamera->worldFOV;
+		position.fov = CAMERA_DATA(pcCamera).worldFOV;
 		position.viewRoll = MANAGER(PhotoMode)->GetViewRoll();
 
 		if (savePlayerTransform) {

@@ -62,7 +62,7 @@ namespace PhotoMode
 			return false;
 		}
 
-		switch (controlMap->contextPriorityStack.back()) {
+		switch (CONTROLMAP_DATA(controlMap).contextPriorityStack.back()) {
 		case RE::UserEvents::INPUT_CONTEXT_ID::kGameplay:
 		case RE::UserEvents::INPUT_CONTEXT_ID::kTFCMode:
 		case RE::UserEvents::INPUT_CONTEXT_ID::kConsole:
@@ -123,7 +123,7 @@ namespace PhotoMode
 		}
 
 		// disable saving
-		RE::PlayerCharacter::GetSingleton()->byCharGenFlag.set(RE::PlayerCharacter::ByCharGenFlag::kDisableSaving);
+		PLAYER_GAMESTATE(RE::PlayerCharacter::GetSingleton()).byCharGenFlag.set(RE::PlayerCharacter::ByCharGenFlag::kDisableSaving);
 
 		// toggle freecam
 		if (originalcameraState != RE::CameraState::kFree) {
@@ -137,7 +137,7 @@ namespace PhotoMode
 		// apply mcm settings
 		FreeCamera::translateSpeed = freeCameraSpeed;
 		if (freezeTimeOnStart) {
-			RE::Main::GetSingleton()->freezeTime = true;
+			MAIN_DATA(RE::Main::GetSingleton()).freezeTime = true;
 		}
 
 		// load default screenshot keys
@@ -215,7 +215,7 @@ namespace PhotoMode
 		TogglePlayerControls(true);
 
 		// allow saving
-		RE::PlayerCharacter::GetSingleton()->byCharGenFlag.reset(RE::PlayerCharacter::ByCharGenFlag::kDisableSaving);
+		PLAYER_GAMESTATE(RE::PlayerCharacter::GetSingleton()).byCharGenFlag.reset(RE::PlayerCharacter::ByCharGenFlag::kDisableSaving);
 
 		// reset variables
 		hiddenUI = false;
@@ -661,7 +661,7 @@ namespace PhotoMode
 	bool Manager::SetupJournalMenu() const
 	{
 		const auto menu = RE::UI::GetSingleton()->GetMenu<RE::JournalMenu>(RE::JournalMenu::MENU_NAME);
-		const auto view = menu ? menu->systemTab.view : nullptr;
+		const auto view = menu ? JOURNALMENU_DATA(menu).systemTab.view : nullptr;
 
 		RE::GFxValue page;
 		if (!view || !view->GetVariable(&page, "_root.QuestJournalFader.Menu_mc.SystemFader.Page_mc")) {

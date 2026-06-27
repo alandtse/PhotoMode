@@ -6,7 +6,7 @@ namespace PhotoMode
 {
 	void Camera::OriginalState::Get()
 	{
-		fov = RE::PlayerCamera::GetSingleton()->worldFOV;
+		fov = CAMERA_DATA(RE::PlayerCamera::GetSingleton()).worldFOV;
 		translateSpeed = FreeCamera::translateSpeed;
 
 		vanillaDOF.blurMultiplier = DOF::blurMultiplier;
@@ -18,7 +18,7 @@ namespace PhotoMode
 
 	void Camera::OriginalState::Revert(bool a_deactivate) const
 	{
-		RE::PlayerCamera::GetSingleton()->worldFOV = fov;
+		CAMERA_DATA(RE::PlayerCamera::GetSingleton()).worldFOV = fov;
 
 		DOF::blurMultiplier = vanillaDOF.blurMultiplier;
 		DOF::nearDist = vanillaDOF.nearDist;
@@ -56,7 +56,7 @@ namespace PhotoMode
 	{
 		ImGui::EnumSlider("$PM_Grid"_T, &CameraGrid::gridType, CameraGrid::gridTypes);
 
-		ImGui::Slider("$PM_FieldOfView"_T, &RE::PlayerCamera::GetSingleton()->worldFOV, 5.0f, 150.0f);
+		ImGui::Slider("$PM_FieldOfView"_T, &CAMERA_DATA(RE::PlayerCamera::GetSingleton()).worldFOV, 5.0f, 150.0f);
 
 		currentViewRollDegrees = RE::rad_to_deg(currentViewRoll);
 		if (ImGui::Slider("$PM_ViewRoll"_T, &currentViewRollDegrees, -90.0f, 90.0f)) {

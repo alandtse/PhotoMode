@@ -6,24 +6,26 @@ namespace PhotoMode
 	{
 		imods.InitForms();
 
-		const auto IMGS = RE::ImageSpaceManager::GetSingleton();
-		if (IMGS->currentBaseData) {
-			imageSpaceData = *IMGS->currentBaseData;
+		const auto  IMGS = RE::ImageSpaceManager::GetSingleton();
+		auto&       imgs = IMAGESPACE_DATA(IMGS);
+		if (imgs.currentBaseData) {
+			imageSpaceData = *imgs.currentBaseData;
 		}
-		IMGS->overrideBaseData = &imageSpaceData;
+		imgs.overrideBaseData = &imageSpaceData;
 	}
 
 	void Filters::RevertState(bool a_fullReset)
 	{
 		// reset imagespace
-		const auto IMGS = RE::ImageSpaceManager::GetSingleton();
+		const auto  IMGS = RE::ImageSpaceManager::GetSingleton();
+		auto&       imgs = IMAGESPACE_DATA(IMGS);
 		if (a_fullReset) {
-			IMGS->overrideBaseData = nullptr;
-		} else if (IMGS->overrideBaseData) {
-			if (IMGS->currentBaseData) {
-				imageSpaceData = *IMGS->currentBaseData;
+			imgs.overrideBaseData = nullptr;
+		} else if (imgs.overrideBaseData) {
+			if (imgs.currentBaseData) {
+				imageSpaceData = *imgs.currentBaseData;
 			}
-			IMGS->overrideBaseData = &imageSpaceData;
+			imgs.overrideBaseData = &imageSpaceData;
 		}
 
 		// reset imod
@@ -39,7 +41,7 @@ namespace PhotoMode
 
 	void Filters::Draw()
 	{
-		if (const auto& overrideData = RE::ImageSpaceManager::GetSingleton()->overrideBaseData) {
+		if (const auto& overrideData = IMAGESPACE_DATA(RE::ImageSpaceManager::GetSingleton()).overrideBaseData) {
 			ImGui::Slider("$PM_Brightness"_T, &overrideData->cinematic.brightness, 0.0f, 3.0f, nullptr, ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput);
 			ImGui::Slider("$PM_Saturation"_T, &overrideData->cinematic.saturation, 0.0f, 3.0f);
 			ImGui::Slider("$PM_Contrast"_T, &overrideData->cinematic.contrast, 0.0f, 3.0f);
@@ -53,7 +55,7 @@ namespace PhotoMode
 			}
 			ImGui::Unindent();
 		} else {
-			RE::ImageSpaceManager::GetSingleton()->overrideBaseData = &imageSpaceData;
+			IMAGESPACE_DATA(RE::ImageSpaceManager::GetSingleton()).overrideBaseData = &imageSpaceData;
 		}
 
 		imods.GetFormResultFromCombo([&](const auto& imod) {

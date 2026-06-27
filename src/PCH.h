@@ -173,6 +173,29 @@ namespace stl
 #	define RENDERER_DATA(a_renderer) (a_renderer)->data
 #endif
 
+// powerof3 CommonLibSSE exposes these engine fields as direct members; CommonLibSSE-NG
+// keeps them in RUNTIME_DATA blocks that are stripped under SKYRIM_CROSS_VR, so the VR
+// build reaches them through the matching accessor instead.
+#if defined(SKYRIMVR)
+#	define MAIN_DATA(a_obj)        (a_obj)->GetRuntimeData()
+#	define ACTOR_DATA(a_obj)       (a_obj)->GetActorRuntimeData()
+#	define CAMERA_DATA(a_obj)      (a_obj)->GetRuntimeData2()  // worldFOV etc.
+#	define MISTMENU_DATA(a_obj)    (a_obj)->GetRuntimeData()
+#	define IMAGESPACE_DATA(a_obj)  (a_obj)->GetVRRuntimeData()
+#	define PLAYER_GAMESTATE(a_obj) (a_obj)->GetGameStatsData()  // byCharGenFlag etc.
+#	define CONTROLMAP_DATA(a_obj)  (a_obj)->GetRuntimeData()
+#	define JOURNALMENU_DATA(a_obj) (a_obj)->GetRuntimeData()
+#else
+#	define MAIN_DATA(a_obj)        (*(a_obj))
+#	define ACTOR_DATA(a_obj)       (*(a_obj))
+#	define CAMERA_DATA(a_obj)      (*(a_obj))
+#	define MISTMENU_DATA(a_obj)    (*(a_obj))
+#	define IMAGESPACE_DATA(a_obj)  (*(a_obj))
+#	define PLAYER_GAMESTATE(a_obj) (*(a_obj))
+#	define CONTROLMAP_DATA(a_obj)  (*(a_obj))
+#	define JOURNALMENU_DATA(a_obj) (*(a_obj))
+#endif
+
 #include "Cache.h"
 #include "Translation.h"
 #include "Version.h"
