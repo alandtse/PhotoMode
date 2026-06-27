@@ -30,7 +30,7 @@ namespace Screenshot
 		std::error_code ec;
 		if (!folder.exists(ec)) {
 			logger::info("{} folder not found, creating it ({})", a_folder, ec.message());
-			std::filesystem::create_directory(a_folder);
+			std::filesystem::create_directories(a_folder, ec);  // create parents too; don't throw if it fails
 			return;
 		}
 
@@ -130,7 +130,7 @@ namespace Screenshot
 		std::error_code ec;
 		if (!std::filesystem::exists(photoDirectory, ec)) {
 			logger::info("\tPhoto directory does not exist, creating it... ({})", ec.message());
-			std::filesystem::create_directory(photoDirectory);
+			std::filesystem::create_directories(photoDirectory, ec);  // create parents too; don't throw if it fails
 		}
 
 		logger::info("\tScreenshot directory : {}", photoDirectory.string());
