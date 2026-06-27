@@ -15,7 +15,8 @@ namespace LoadScreen
 	{
 		std::vector<std::string> painting_paths;
 
-		const auto iterator = std::filesystem::directory_iterator(R"(Data\Meshes\PhotoMode\Paintings)");
+		std::error_code ec;  // skip gracefully if the painting assets aren't installed
+		const auto      iterator = std::filesystem::directory_iterator(R"(Data\Meshes\PhotoMode\Paintings)", ec);
 		for (const auto& entry : iterator) {
 			if (entry.exists()) {
 				if (const auto& path = entry.path(); !path.empty() && path.extension() == ".nif") {

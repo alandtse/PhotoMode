@@ -160,7 +160,8 @@ namespace Screenshot
 	{
 		const auto get_photos_index = [this]() {
 			std::vector<Image> photos{};
-			for (const auto& entry : std::filesystem::directory_iterator(photoDirectory)) {
+			std::error_code    ec;  // skip gracefully if the photo directory doesn't exist yet
+			for (const auto& entry : std::filesystem::directory_iterator(photoDirectory, ec)) {
 				if (entry.is_regular_file()) {
 					if (const auto& path = entry.path(); path.extension() == ".png") {
 						auto pathStr = entry.path().string();
