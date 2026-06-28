@@ -32,5 +32,9 @@ cmake --preset vs2022-windows-vcpkg
 cmake --build build --config Release
 ```
 
+## Credits
+Third-party code (PlayerMannequin for the VR photo clone, ImGuiVRHelper for in-headset
+rendering) is credited in [CREDITS.md](CREDITS.md).
+
 ## License
 [MIT](LICENSE)
