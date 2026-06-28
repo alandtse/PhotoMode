@@ -46,6 +46,14 @@ void OnInit(SKSE::MessagingInterface::Message* a_msg)
 			Console::Install();
 		}
 		break;
+	case SKSE::MessagingInterface::kPostLoadGame:
+	case SKSE::MessagingInterface::kNewGame:
+		{
+			// Form DB rebuilt / rig re-established: drop state that would otherwise dangle or restore
+			// stale coordinates (VR clone base, play-space snapshot).
+			MANAGER(PhotoMode)->OnGameLoad();
+		}
+		break;
 	default:
 		break;
 	}

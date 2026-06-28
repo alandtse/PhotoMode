@@ -74,6 +74,24 @@ namespace PhotoMode
 			return Result<void>::Error("Failed to apply camera position: PlayerCamera singleton is null");
 		}
 
+		// VR: restore the play-space (PlayerWorldNode) transform only; flat falls through to
+		// FreeCameraState. The node transform alone defines the view (it's relative to the frozen
+		// player), so DON'T also SetPosition the player — that compounds with the node restore and
+		// teleports the user (badly in exteriors). Camera positions are angles of the current scene.
+		if (REL::Module::IsVR()) {
+			const auto player = RE::PlayerCharacter::GetSingleton();
+			const auto vrNodes = player ? player->GetVRNodeData() : nullptr;
+			const auto node = vrNodes ? vrNodes->PlayerWorldNode.get() : nullptr;
+			if (!node) {
+				return Result<void>::Error("Failed to apply camera position: no VR play-space node");
+			}
+			node->local.translate = position;
+			node->local.rotate = playSpaceRotation;
+			RE::NiUpdateData updateData{};
+			node->Update(updateData);
+			return Result<void>::Ok();
+		}
+
 		if (!pcCamera->IsInFreeCameraMode()) {
 			pcCamera->ToggleFreeCameraMode(false);
 		}
@@ -321,6 +339,24 @@ namespace PhotoMode
 		}
 
 		CameraPosition position;
+
+		// VR has no usable FreeCameraState; the "camera" is the play space (PlayerWorldNode), so
+		// capture its transform instead.
+		if (REL::Module::IsVR()) {
+			const auto player = RE::PlayerCharacter::GetSingleton();
+			const auto vrNodes = player ? player->GetVRNodeData() : nullptr;
+			if (const auto node = vrNodes ? vrNodes->PlayerWorldNode.get() : nullptr) {
+				position.position = node->local.translate;
+				position.playSpaceRotation = node->local.rotate;
+			}
+			if (savePlayerTransform && player) {
+				position.playerPos = player->GetPosition();
+				position.playerRot = player->GetAngle();
+				const auto cell = player->GetParentCell();
+				position.cell.SetNumericID(cell ? cell->GetFormID() : 0);
+			}
+			return position;
+		}
 
 		const auto currentState = pcCamera->currentState;
 		if (!currentState || currentState->id != RE::CameraState::kFree) {

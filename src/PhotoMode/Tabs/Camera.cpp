@@ -46,9 +46,17 @@ namespace PhotoMode
 		// revert grid
 		CameraGrid::gridType = CameraGrid::GridType::kDisabled;
 
-		// revert DOF
-		if (const auto& effect = RE::ImageSpaceManager::GetSingleton()->effects[RE::ImageSpaceManager::ImageSpaceEffectEnum::DepthOfField]) {
-			static_cast<RE::ImageSpaceEffectDepthOfField*>(effect)->enabled = true;
+		// revert DOF. The effect enum is an SE-ordered index, but VR orders its effects array
+		// differently, so indexing with the raw enum reads a garbage pointer in VR (CTD on exit).
+		// Map to the runtime-correct slot and skip entirely if this runtime lacks the effect.
+		using ISM = RE::ImageSpaceManager;
+		if (ISM::SupportsCurrentRuntime(ISM::ImageSpaceEffectEnum::DepthOfField)) {
+			if (const auto ism = ISM::GetSingleton()) {
+				const auto index = ISM::GetCurrentIndex(ISM::ImageSpaceEffectEnum::DepthOfField);
+				if (const auto effect = ism->effects[index]) {
+					static_cast<RE::ImageSpaceEffectDepthOfField*>(effect)->enabled = true;
+				}
+			}
 		}
 	}
 

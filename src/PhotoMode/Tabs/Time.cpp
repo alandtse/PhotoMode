@@ -1,6 +1,7 @@
 #include "Time.h"
 
 #include "ImGui/Widgets.h"
+#include "PhotoMode/Manager.h"
 
 namespace PhotoMode
 {
@@ -60,7 +61,12 @@ namespace PhotoMode
 
 	void Time::Draw()
 	{
-		ImGui::CheckBox("$PM_FreezeTime"_T, &MAIN_DATA(RE::Main::GetSingleton()).freezeTime);
+		// Route freeze through the manager so its VR handling applies (the panel and free-cam keep
+		// running off the StopTimer hook while Main::freezeTime halts the main loop).
+		bool frozen = MANAGER(PhotoMode)->IsTimeFrozen();
+		if (ImGui::CheckBox("$PM_FreezeTime"_T, &frozen)) {
+			MANAGER(PhotoMode)->SetTimeFrozen(frozen);
+		}
 
 		currentGlobalTimeMult = RE::BSTimer::QGlobalTimeMultiplier();
 		if (ImGui::Slider("$PM_GlobalTimeMult"_T, &currentGlobalTimeMult, 0.01f, 2.0f)) {

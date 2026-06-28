@@ -18,6 +18,7 @@ set(headers ${headers}
 	src/Papyrus.h
 	src/PhotoMode/Hotkeys.h
 	src/PhotoMode/Manager.h
+	src/PhotoMode/PlayerClone.h
 	src/PhotoMode/Tabs/Camera.h
 	src/PhotoMode/Tabs/CameraPositions.h
 	src/PhotoMode/Tabs/Character.h

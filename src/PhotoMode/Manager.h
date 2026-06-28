@@ -30,6 +30,12 @@ namespace PhotoMode
 		void               Revert(bool a_deactivate = false);
 		void               QuitOnEscape();
 
+		// Freeze the world for a still shot via Main::freezeTime. That flag also halts the main update
+		// loop, so in VR the panel and free-cam are driven from the always-firing StopTimer hook to
+		// survive it, and the freeze is deferred until the photo clone has streamed in.
+		[[nodiscard]] bool IsTimeFrozen() const;
+		void               SetTimeFrozen(bool a_frozen);
+
 		bool GetResetAll() const;
 		void DoResetAll();
 
@@ -50,7 +56,10 @@ namespace PhotoMode
 		bool OnFrameUpdate();
 		bool HasOverlay() const;
 
-		void                              OnDataLoad();
+		void OnDataLoad();
+		// Reset state invalidated by a save load / new game: the VR clone's runtime base (the form
+		// DB is rebuilt) and the captured play-space snapshot (the rig is re-established).
+		void                              OnGameLoad();
 		std::pair<ImGui::Texture*, float> GetOverlay() const;
 
 		bool IsCursorHoveringOverWindow() const;
@@ -67,6 +76,11 @@ namespace PhotoMode
 
 		// kMenu | kActivate | kJumping
 		static constexpr auto controlFlags = static_cast<RE::ControlMap::UEFlag>(1036);
+
+		// VR defers the freeze-on-start until the photo clone has streamed in (a freeze stalls its
+		// 3D load). Set on activate, cleared once applied or on deactivate.
+		bool          pendingVRFreeze{ false };
+		std::uint32_t vrFreezeDelay{ 0 };  // fallback frame counter if the clone never readies
 
 		static constexpr std::array tabs = {
 			"$PM_Camera",
@@ -85,6 +99,7 @@ namespace PhotoMode
 		static constexpr std::array tabResetNotifs = { "$PM_ResetNotifCamera", "$PM_ResetNotifTime", "$PM_ResetNotifPlayer", "$PM_ResetNotifFilters", "$PM_ResetNotifOverlays" };
 
 		static void        TogglePlayerControls(bool a_enable);
+		static void        HideVRFirstPersonBody(bool a_hide);  // declutter the free-cam view in VR
 		void               DrawControls();
 		void               DrawBar() const;
 		[[nodiscard]] bool SetupJournalMenu() const;

@@ -665,7 +665,7 @@ namespace Input
 							} else if (hotKey == hotKeys->PreviousTabKey() && buttonEvent->IsDown()) {
 								photoMode->NavigateTab(true);
 							} else if (hotKey == hotKeys->FreezeTimeKey() && buttonEvent->IsDown()) {
-								MAIN_DATA(RE::Main::GetSingleton()).freezeTime = !MAIN_DATA(RE::Main::GetSingleton()).freezeTime;
+								photoMode->SetTimeFrozen(!photoMode->IsTimeFrozen());
 							} else if (hotKey == hotKeys->ResetKey()) {
 								if (buttonEvent->IsUp()) {
 									photoMode->Revert(false);
