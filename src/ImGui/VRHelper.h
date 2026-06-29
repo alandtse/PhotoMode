@@ -1,5 +1,7 @@
 #pragma once
 
+#include <span>
+
 // Bridges PhotoMode's ImGui output to the ImGuiVRHelper plugin so the menu renders
 // inside the headset and receives controller input on the VR build. On SE/AE these
 // are no-ops / a plain DX11 present, leaving the flat-screen path unchanged.
@@ -22,6 +24,36 @@ namespace ImGui::Renderer::VR
 	// True when the helper has routed in-scene focus to PhotoMode this frame
 	// (i.e. the panel is being composited). Always false on flat screen.
 	bool HasFocus();
+
+	// VR-only off-panel shortcuts. Defined once in VRHelper.cpp and used for both the helper combo
+	// registration and the on-screen hints, so a binding lives in a single place. Registered
+	// off-panel: edge-triggered once per press, only while the wand is off the panel (on the panel
+	// the same buttons drive the UI). Order matches g_defs / ShortcutHints().
+	enum class Shortcut : std::size_t
+	{
+		TakePhoto,
+		HideUI,
+		FreezeTime,
+		NextTab,
+		PrevTab,
+		Reset,
+		Count
+	};
+
+	// True once per off-panel press of the shortcut's controller button.
+	bool Pressed(Shortcut a_shortcut);
+
+	// Action label + the controller button that triggers it, in Shortcut order. PhotoMode's in-panel
+	// controls legend draws these so it always matches the registered bindings.
+	struct ShortcutHint
+	{
+		const char* action;
+		const char* button;
+	};
+	std::span<const ShortcutHint> ShortcutHints();
+
+	// Drain pending shortcut edges; call on activate so a pre-activation press doesn't fire.
+	void ArmShortcuts();
 
 	// Take/release the helper's interactive overlay for a photo-mode session. Requested
 	// once on activate (so the panel persists once the game unpauses) and released on

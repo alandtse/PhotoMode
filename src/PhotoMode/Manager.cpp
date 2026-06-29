@@ -290,6 +290,7 @@ namespace PhotoMode
 			g_photoClone.Spawn();
 			CloseBlockingMenus();                 // drop the pause so the free camera runs
 			ImGui::Renderer::VR::RequestFocus();  // own the interactive panel for this session
+			ImGui::Renderer::VR::ArmShortcuts();  // drop stale combo edges from before activation
 			// The Character tab edits the photographed subject; in VR that's the clone, not the
 			// hidden player.
 			if (const auto clone = g_photoClone.GetClone()) {
@@ -384,6 +385,38 @@ namespace PhotoMode
 
 			// Fly the play space (VR has no usable detached camera — see DriveVRCamera).
 			DriveVRCamera();
+
+			// Off-panel face buttons are PhotoMode shortcuts, registered with the helper as off-panel
+			// combos so it gates them to off the panel itself (on the panel the same buttons drive the
+			// UI) and lists them in its controller map. Read every frame to consume the edge; act when
+			// focused. Dominant hand: shutter / hide / freeze. Off hand: next tab / reset.
+			using VRS = ImGui::Renderer::VR::Shortcut;
+			const bool takePhoto = ImGui::Renderer::VR::Pressed(VRS::TakePhoto);
+			const bool toggleUI = ImGui::Renderer::VR::Pressed(VRS::HideUI);
+			const bool freezeTime = ImGui::Renderer::VR::Pressed(VRS::FreezeTime);
+			const bool nextTab = ImGui::Renderer::VR::Pressed(VRS::NextTab);
+			const bool prevTab = ImGui::Renderer::VR::Pressed(VRS::PrevTab);
+			const bool reset = ImGui::Renderer::VR::Pressed(VRS::Reset);
+			if (ImGui::Renderer::VR::HasFocus()) {
+				if (takePhoto) {
+					MANAGER(Input)->QueueScreenshot(true);
+				}
+				if (toggleUI) {
+					ToggleUI();
+				}
+				if (freezeTime) {
+					SetTimeFrozen(!IsTimeFrozen());
+				}
+				if (nextTab) {
+					NavigateTab(false);
+				}
+				if (prevTab) {
+					NavigateTab(true);
+				}
+				if (reset) {
+					Revert(false);
+				}
+			}
 
 			// Deferred freeze: only freeze once the clone has streamed in (freezeTime stalls its
 			// 3D load), with a frame-count fallback in case it never readies.
@@ -835,6 +868,28 @@ namespace PhotoMode
 		const static auto offsetY = size.y / 25.0f;
 
 		ImGui::SetNextWindowPos(ImVec2(center.x, size.y - offsetY), ImGuiCond_Always, ImVec2(0.5, 0.5));
+
+		if (REL::Module::IsVR()) {
+			// VR controls legend: each action and the off-panel controller button that triggers it,
+			// drawn from the same table that registers the combos -- so the hint can't drift from the
+			// binding.
+			ImGui::Begin("##Bar", nullptr, ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize);
+			ImGui::ExtendWindowPastBorder();
+			bool first = true;
+			for (const auto& hint : ImGui::Renderer::VR::ShortcutHints()) {
+				if (!first) {
+					ImGui::SameLine();
+					ImGui::TextDisabled("|");
+					ImGui::SameLine();
+				}
+				first = false;
+				ImGui::TextDisabled("%s", hint.button);
+				ImGui::SameLine();
+				ImGui::TextUnformatted(hint.action);
+			}
+			ImGui::End();
+			return;
+		}
 
 		bool canNavigateWithMouse = MANAGER(Input)->CanNavigateWithMouse();
 

@@ -203,11 +203,17 @@ namespace ImGui::Renderer
 				}
 			}
 
-			if (!photoMode->IsActive() || !photoMode->IsHidden() || !photoMode->HasOverlay()) {
+			if (!photoMode->IsActive() || !photoMode->IsHidden()) {
 				return;
 			}
-
-			RenderImGuiFrame([&] { photoMode->DrawOverlays(); });
+			if (photoMode->HasOverlay()) {
+				RenderImGuiFrame([&] { photoMode->DrawOverlays(); });
+			} else if (REL::Module::IsVR()) {
+				// Hidden with nothing to draw: render an empty frame so the VR panel blits fully
+				// transparent (clear color alpha 0) and actually disappears, instead of freezing the
+				// last menu image on the overlay.
+				RenderImGuiFrame([] {});
+			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};

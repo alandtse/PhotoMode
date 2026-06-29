@@ -83,7 +83,11 @@ namespace Screenshot
 
 	void InstallHooks()
 	{
-		REL::Relocation<std::uintptr_t> target{ RELOCATION_ID(35556, 36555), OFFSET(0x48E, 0x454) };  // Main::Swap
+		// Main::Render writes the screenshot via DebugNotification(path, kPNG) reading the kSCREENSHOT
+		// target; intercept that call to apply PhotoMode's capture (overlay / painting / folder). The
+		// VR call site is 0x496 (RE'd from SkyrimVR 1.4.15); the SE/AE-only offset landed on the wrong
+		// instruction and crashed when a shot was taken in VR.
+		REL::Relocation<std::uintptr_t> target{ RELOCATION_ID(35556, 36555), OFFSET_3(0x48E, 0x454, 0x496) };  // Main::Render
 		stl::write_thunk_call<TakeScreenshot>(target.address());
 	}
 }
