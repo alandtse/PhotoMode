@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <span>
+#include <string>
 
 // Bridges PhotoMode's ImGui output to the ImGuiVRHelper plugin so the menu renders
 // inside the headset and receives controller input on the VR build. On SE/AE these
@@ -58,11 +59,11 @@ namespace ImGui::Renderer::VR
 	bool Pressed(Shortcut a_shortcut);
 
 	// Action label + the controller button that triggers it, in Shortcut order. PhotoMode's in-panel
-	// controls legend draws these so it always matches the registered bindings.
+	// controls legend draws these; button is derived from the combo's live keys so it tracks rebinds.
 	struct ShortcutHint
 	{
 		const char* action;
-		const char* button;
+		std::string button;
 	};
 	std::span<const ShortcutHint> ShortcutHints();
 

@@ -18,20 +18,19 @@ namespace ImGui::Renderer::VR
 		// hand handles tab/reset. The dominant face buttons avoid the helper's secondary open chord.
 		struct ShortcutDef
 		{
-			const char*                             action;  // combo label (helper map) + hint label
+			const char*                             action;  // combo label (helper map) + legend action
 			ImGuiVRHelperPluginAPI::InputDeviceType hand;
 			std::uint32_t                           key;
-			const char*                             button;  // hint text for the button
 		};
 		using K = RE::BSOpenVRControllerDevice::Keys;
 		using D = ImGuiVRHelperPluginAPI::InputDeviceType;
 		constexpr ShortcutDef g_defs[] = {
-			{ "Take Photo", D::Primary, K::kTrigger, "Trigger" },
-			{ "Hide UI", D::Primary, K::kXA, "A/X" },
-			{ "Freeze Time", D::Primary, K::kBY, "B/Y" },
-			{ "Next Tab", D::Secondary, K::kTrigger, "Off Trigger" },
-			{ "Prev Tab", D::Secondary, K::kBY, "Off B/Y" },
-			{ "Reset", D::Secondary, K::kXA, "Off A/X" },
+			{ "Take Photo", D::Primary, K::kTrigger },
+			{ "Hide UI", D::Primary, K::kXA },
+			{ "Freeze Time", D::Primary, K::kBY },
+			{ "Next Tab", D::Secondary, K::kTrigger },
+			{ "Prev Tab", D::Secondary, K::kBY },
+			{ "Reset", D::Secondary, K::kXA },
 		};
 		static_assert(std::size(g_defs) == static_cast<std::size_t>(Shortcut::Count));
 
@@ -60,8 +59,17 @@ namespace ImGui::Renderer::VR
 			(void)ini.SaveFile(kBindsPath);
 		}
 
+		// Legend label for a bound chord, matching g_defs's style: the off hand gets an "Off " prefix,
+		// the button name comes from the helper's shared mapping so it stays consistent with the
+		// controller map and tracks rebinds. Empty chord = unbound.
+		std::string HintLabel(const ImGuiVRHelperPluginAPI::InputCombo& a_key)
+		{
+			auto name = ImGuiVRHelperPluginAPI::ButtonName(a_key.GetDevice(), a_key.GetKey());
+			return a_key.GetDevice() == D::Secondary ? "Off " + name : name;
+		}
+
 		// Register each def as an off-panel combo (the helper gates and lists it), restoring any
-		// persisted rebind and mirroring the default into the hint legend.
+		// persisted rebind and labeling the legend from the live keys.
 		void RegisterShortcuts()
 		{
 			using Combo = ImGuiVRHelperPluginAPI::InputCombo;
@@ -71,13 +79,13 @@ namespace ImGui::Renderer::VR
 				const auto        defaultPacked = defaultKeys[0].Packed();
 				const auto        saved = LoadBind(d.action, defaultPacked);
 				const std::vector keys{ saved == defaultPacked ? defaultKeys[0] : Combo(static_cast<D>(saved >> 16), saved & 0xFFFFu) };
-				// Persist whenever the user rebinds/clears/resets this combo in the helper's map.
-				const char* action = d.action;
-				auto        onRebind = [action](const Combo* a_keys, std::size_t a_n) {
-                    SaveBind(action, a_n > 0 ? a_keys[0].Packed() : 0u);
+				// On rebind: persist the chord and refresh the legend so it shows the live binding.
+				auto onRebind = [i](const Combo* a_keys, std::size_t a_n) {
+                    SaveBind(g_defs[i].action, a_n > 0 ? a_keys[0].Packed() : 0u);
+                    g_hints[i].button = a_n > 0 ? HintLabel(a_keys[0]) : "(unbound)";
 				};
 				g_combos[i] = g_vrClient.AddCombo(d.action, keys, onRebind, defaultKeys, /*offPanel*/ true);
-				g_hints[i] = { d.action, d.button };
+				g_hints[i] = { d.action, HintLabel(keys[0]) };
 			}
 		}
 	}

@@ -945,7 +945,7 @@ namespace PhotoMode
 					ImGui::SameLine();
 				}
 				first = false;
-				ImGui::TextDisabled("%s", hint.button);
+				ImGui::TextDisabled("%s", hint.button.c_str());
 				ImGui::SameLine();
 				ImGui::TextUnformatted(hint.action);
 			}
