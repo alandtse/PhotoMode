@@ -64,11 +64,15 @@ namespace PhotoMode
 	{
 		ImGui::EnumSlider("$PM_Grid"_T, &CameraGrid::gridType, CameraGrid::gridTypes);
 
-		ImGui::Slider("$PM_FieldOfView"_T, &CAMERA_DATA(RE::PlayerCamera::GetSingleton()).worldFOV, 5.0f, 150.0f);
+		// FOV and view-roll are driven by the headset in VR (the HMD owns projection and orientation);
+		// exposing them does nothing useful and fights the stereo render, so hide them there.
+		if (!REL::Module::IsVR()) {
+			ImGui::Slider("$PM_FieldOfView"_T, &CAMERA_DATA(RE::PlayerCamera::GetSingleton()).worldFOV, 5.0f, 150.0f);
 
-		currentViewRollDegrees = RE::rad_to_deg(currentViewRoll);
-		if (ImGui::Slider("$PM_ViewRoll"_T, &currentViewRollDegrees, -90.0f, 90.0f)) {
-			currentViewRoll = RE::deg_to_rad(currentViewRollDegrees);
+			currentViewRollDegrees = RE::rad_to_deg(currentViewRoll);
+			if (ImGui::Slider("$PM_ViewRoll"_T, &currentViewRollDegrees, -90.0f, 90.0f)) {
+				currentViewRoll = RE::deg_to_rad(currentViewRollDegrees);
+			}
 		}
 
 		ImGui::Slider("$PM_TranslateSpeed"_T,

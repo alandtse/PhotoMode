@@ -70,6 +70,12 @@ namespace PhotoMode
 		a_clone->bodyTintColor = a_playerBase->bodyTintColor;
 		SetActorBaseDataFlag(a_clone, RE::ACTOR_BASE_DATA::Flag::kFemale, a_playerBase->GetSex() == RE::SEXES::kFemale);
 
+		// A fresh base leaves the attack-data map null, which the engine's attack eval dereferences and
+		// CTDs when the AI clone is interacted with. Borrow the player's (same race, so it's valid);
+		// NiPointer assignment keeps the refcount balanced.
+		static_cast<RE::BGSAttackDataForm*>(a_clone)->attackDataMap =
+			static_cast<RE::BGSAttackDataForm*>(a_playerBase)->attackDataMap;
+
 		// Match the player's hair so helmets/face render correctly.
 		for (std::int8_t i = 0; i < a_playerBase->numHeadParts; ++i) {
 			if (const auto headPart = a_playerBase->headParts ? a_playerBase->headParts[i] : nullptr;
@@ -173,12 +179,14 @@ namespace PhotoMode
 			return;
 		}
 		poseApplied = false;
+		faceReset = false;
 
 		const auto player = RE::PlayerCharacter::GetSingleton();
 		const auto playerBase = player ? player->GetActorBase() : nullptr;
 		if (!playerBase) {
 			return;
 		}
+		spawnPos = player->GetPosition();  // pin the clone here; PlaceObjectAtMe shoves it out of the capsule
 
 		if (!cloneBase) {
 			const auto factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::TESNPC>();
@@ -186,6 +194,22 @@ namespace PhotoMode
 			if (!cloneBase) {
 				logger::error("PlayerClone: failed to create clone base"sv);
 				return;
+			}
+
+			// Borrow the Mannequin's AI brain via the template system (not a copy): a fresh base's null
+			// combat/idle data crashes the AI update, and copying would share heap-owned members like
+			// faceData so expressions would corrupt the shared base. The template gives a real high
+			// process — the source of facegen + idle playback — while appearance stays ours.
+			using TUF = RE::ACTOR_BASE_DATA::TEMPLATE_USE_FLAG;
+			if (const auto mannequinBase = RE::TESForm::LookupByID<RE::TESNPC>(0x89A85)) {
+				cloneBase->baseTemplateForm = mannequinBase;
+				cloneBase->actorData.actorBaseFlags.set(RE::ACTOR_BASE_DATA::Flag::kUsesTemplate);
+				// Borrow only the AI brain. NOT kAttackData: the Mannequin has no attack-data map, and
+				// CopyFromTemplateForms would overwrite the valid one we copy in UpdateAppearance with
+				// the Mannequin's null.
+				cloneBase->actorData.templateUseFlags.set(TUF::kAIData, TUF::kAIPackages, TUF::kAIDefPackList);
+			} else {
+				logger::warn("PlayerClone: vanilla Mannequin base (0x89A85) not found; clone may be inert"sv);
 			}
 		}
 		UpdateAppearance(cloneBase, playerBase);
@@ -199,10 +223,8 @@ namespace PhotoMode
 
 		ref->data.angle = { 0.0f, 0.0f, player->GetAngleZ() };
 		if (const auto cloneActor = ref->As<RE::Actor>()) {
-			// Make it an inert display dummy: a freshly created NPC base has no combat/idle
-			// data, so the AI update (RandomlyPlaySpecialIdles) dereferences null and crashes.
-			// Disable AI before the next actor-update tick so it is never processed.
-			cloneActor->EnableAI(false);
+			// AI stays enabled so the clone gains a high process (facegen data + idle playback); the
+			// Character tab's do-nothing package keeps it standing still.
 			cloneActor->StopCombat();
 			CopyWornEquipment(cloneActor, player);
 			cloneActor->DoReset3D(true);  // rebuild the biped so the equipped gear renders
@@ -223,34 +245,43 @@ namespace PhotoMode
 			return;
 		}
 
-		// Both are third-person actor skeletons, so the bone names match. The player is frozen
-		// (PhotoMode pauses time on activate), so reading it now reproduces the entry pose even
-		// though the clone's 3D streams in a few frames after PlaceObjectAtMe.
+		// Wait for the clone's 3D (head + body) to stream in — it loads a few frames after
+		// PlaceObjectAtMe. The clone poses via its own idle animation (AI is enabled), so there is NO
+		// manual bone-copy: copying the player's bone locals (including the root/COM nodes) offset the
+		// clone's skeleton from its actor position, which mislocated effect art and made the Transforms
+		// sliders apply incorrectly.
 		const auto cloneRoot = cloneActor->Get3D(false);
-		const auto playerRoot = player->Get3D(false);
-		if (!cloneRoot || !playerRoot) {
+		if (!cloneRoot) {
 			return;  // clone 3D not loaded yet — try again next frame
 		}
 
-		std::unordered_map<std::string, RE::NiTransform> pose;
-		VisitNodes(playerRoot, [&](RE::NiAVObject* a_node) {
-			if (const auto* name = a_node->name.c_str(); name && *name) {
-				pose.insert_or_assign(name, a_node->local);
-			}
-		});
+		// Arm facial animation. The engine only switches a face into its per-frame-morphed state during
+		// DoReset3D's model update, and only when GetFaceGenAnimationData() is non-null at that instant.
+		// The Spawn-time DoReset3D runs before the head 3D has streamed in, so it's skipped (RE'd in
+		// AIProcess::Update3DModel_Impl). Re-run it once now that the head exists, then settle a frame
+		// before posing so the rebuilt model is stable.
+		if (!faceReset) {
+			cloneActor->DoReset3D(true);
+			faceReset = true;
+			return;
+		}
 
-		std::size_t matched = 0;
-		VisitNodes(cloneRoot, [&](RE::NiAVObject* a_node) {
-			if (const auto* name = a_node->name.c_str(); name && *name) {
-				if (const auto it = pose.find(name); it != pose.end()) {
-					a_node->local = it->second;
-					++matched;
-				}
+		// Complete the facegen process link that the engine's gated path skips for a runtime clone: the
+		// per-frame face morph reads middleHigh->faceAnimationData (which DoReset3D leaves null here), so
+		// point it at the head-node data, or expressions/phonemes never tick.
+		if (const auto proc = cloneActor->GetActorRuntimeData().currentProcess) {
+			if (const auto mid = proc->middleHigh; mid && !mid->faceAnimationData) {
+				mid->faceAnimationData = cloneActor->GetFaceGenAnimationData();
 			}
-		});
+		}
 
-		RE::NiUpdateData updateData{};
-		cloneRoot->Update(updateData);
+		// PlaceObjectAtMe spawns the clone overlapping the player capsule, so the solver shoves it out
+		// (it lands in front). Stop its sim (a static display actor never needs live collision) and
+		// teleport it back to the captured spot.
+		if (const auto charController = cloneActor->GetCharController()) {
+			charController->flags.set(RE::CHARACTER_FLAGS::kNoSim);
+		}
+		cloneActor->SetPosition(spawnPos, true);
 
 		// Now that the clone's 3D exists, replay the player's active-effect visuals and the
 		// readied-spell charge art onto it.
@@ -258,7 +289,6 @@ namespace PhotoMode
 		CopyHandMagic(cloneActor, player);
 
 		poseApplied = true;
-		logger::info("PlayerClone: applied pose ({} of {} bones)"sv, matched, pose.size());
 	}
 
 	void PlayerClone::Despawn()

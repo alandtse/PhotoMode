@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <span>
 
 // Bridges PhotoMode's ImGui output to the ImGuiVRHelper plugin so the menu renders
@@ -21,9 +22,22 @@ namespace ImGui::Renderer::VR
 
 	bool IsConnected();
 
+	// Composition HUD overlay: a second, HUD-mode helper client whose transparent HMD-anchored plane
+	// fills the view, so in-scene aids (grid + the selected overlay frame) frame the actual shot (the
+	// main panel is a floating quad). Start on photo-mode activate, Stop on exit; Render every active
+	// frame (it self-clears).
+	void StartHud();
+	void StopHud();
+	void RenderHud(const std::function<void()>& a_draw);
+
 	// True when the helper has routed in-scene focus to PhotoMode this frame
 	// (i.e. the panel is being composited). Always false on flat screen.
 	bool HasFocus();
+
+	// True when the wand laser is intersecting PhotoMode's panel this frame. Used to suppress the
+	// free-camera thumbstick drive so the stick scrolls the menu instead of flying the play space.
+	// Always false on flat screen.
+	bool IsPointerInPanel();
 
 	// VR-only off-panel shortcuts. Defined once in VRHelper.cpp and used for both the helper combo
 	// registration and the on-screen hints, so a binding lives in a single place. Registered

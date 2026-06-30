@@ -236,7 +236,9 @@ namespace ImGui
 		bool hovered = false;
 		bool canNavigateWithMouse = MANAGER(Input)->CanNavigateWithMouse();
 
-		if (canNavigateWithMouse) {
+		if (canNavigateWithMouse || REL::Module::IsVR()) {
+			// VR: the wand acts as a mouse cursor, so use hover even though VR isn't classified KBM —
+			// otherwise this arrow-cycle widget is unreachable (it can't be focused + arrow-clicked).
 			hovered = ItemHoverable(frame_bb, id, g.LastItemData.ItemFlags);
 			if (hovered) {
 				SetHoveredID(id);

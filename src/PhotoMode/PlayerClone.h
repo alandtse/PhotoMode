@@ -12,9 +12,9 @@ namespace PhotoMode
 	public:
 		void Spawn();
 		void Despawn();
-		// Copy the frozen player pose onto the clone once its 3D has streamed in (call each
-		// frame while active; it applies once). The clone is a separate actor so it spawns in
-		// a default pose otherwise.
+		// Per-spawn setup once the clone's 3D has streamed in (call each frame while active; it runs
+		// once): re-arm facial animation, then replay the player's active-effect visuals and readied-
+		// spell charge art. The clone poses itself via idle animation (AI enabled), so no bone-copy.
 		void               ApplyPose();
 		[[nodiscard]] bool IsSpawned() const { return static_cast<bool>(cloneRef); }
 		// The spawned clone actor, or nullptr. Lets the Character tab target the photographed clone
@@ -34,6 +34,7 @@ namespace PhotoMode
 			cloneBase = nullptr;
 			cloneRef = {};
 			poseApplied = false;
+			faceReset = false;
 		}
 
 	private:
@@ -48,6 +49,10 @@ namespace PhotoMode
 
 		RE::TESNPC*         cloneBase{ nullptr };  // runtime base, reused across sessions
 		RE::ObjectRefHandle cloneRef{};
+		RE::NiPoint3        spawnPos{};  // the player's exact position at spawn; the clone is pinned here
 		bool                poseApplied{ false };
+		// One-shot: re-run DoReset3D once the head 3D has streamed in, to arm facial animation that
+		// the Spawn-time reset (head not yet loaded) couldn't.
+		bool faceReset{ false };
 	};
 }

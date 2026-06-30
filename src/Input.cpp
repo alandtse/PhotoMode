@@ -597,30 +597,38 @@ namespace Input
 
 				auto& io = ImGui::GetIO();
 
-				if (lastInputDevice == DEVICE::kNone || inputDevice == DEVICE::kNone || lastInputDevice != inputDevice) {
-					io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
-					io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
+				// Flat screen switches ImGui's nav mode and the game cursor by input device. VR must NOT:
+				// the helper owns VR input and the wand is always the mouse, so flipping to gamepad-nav the
+				// moment a controller button is used (e.g. a tab shortcut) would stop the wand's trigger
+				// clicks from activating widgets. Leave VR in its default mouse mode.
+				if (!REL::Module::IsVR()) {
+					if (lastInputDevice == DEVICE::kNone || inputDevice == DEVICE::kNone || lastInputDevice != inputDevice) {
+						io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
+						io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
 
-					if (IsInputGamepad()) {
-						io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-						io.ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;  // unused flag to force ImGui to update gamepad input from backend
-					} else {
-						if (IsInputKBM() && !DoNavigateWithMouse()) {
-							io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+						if (IsInputGamepad()) {
+							io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+							io.ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;  // unused flag to force ImGui to update gamepad input from backend
+						} else {
+							if (IsInputKBM() && !DoNavigateWithMouse()) {
+								io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+							}
 						}
 					}
 				}
 
 				bool canNavigateWithMouse = CanNavigateWithMouse();
 
-				if (canNavigateWithMouse && (!cursorInit || (!cursorMenuOpen && !panCamera))) {
-					ToggleCursor(true);
-					cursorInit = true;
-					MANAGER(PhotoMode)->UpdateKeyboardFocus();
-				} else if (IsInputGamepad() && (cursorInit || cursorMenuOpen)) {
-					ToggleCursor(false);
-					cursorInit = false;
-					MANAGER(PhotoMode)->UpdateKeyboardFocus();
+				if (!REL::Module::IsVR()) {
+					if (canNavigateWithMouse && (!cursorInit || (!cursorMenuOpen && !panCamera))) {
+						ToggleCursor(true);
+						cursorInit = true;
+						MANAGER(PhotoMode)->UpdateKeyboardFocus();
+					} else if (IsInputGamepad() && (cursorInit || cursorMenuOpen)) {
+						ToggleCursor(false);
+						cursorInit = false;
+						MANAGER(PhotoMode)->UpdateKeyboardFocus();
+					}
 				}
 
 				// process inputs

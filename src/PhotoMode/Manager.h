@@ -45,6 +45,11 @@ namespace PhotoMode
 		void NavigateTab(bool a_left);
 		void UpdateKeyboardFocus();
 
+		// The Character tab's photographed subject: the player on flat screen, the spawned clone in VR
+		// (the player there is the hidden camera rig). Ensures the subject's characterTab entry exists
+		// and returns it. Single source of truth for Activate and the per-frame Draw selection.
+		RE::Actor* EnsureDefaultCharacter();
+
 		[[nodiscard]] float GetViewRoll(float a_fallback) const;
 		[[nodiscard]] float GetViewRoll() const;
 		void                SetViewRoll(float a_value);
@@ -52,6 +57,10 @@ namespace PhotoMode
 		void TryOpenFromTweenMenu();
 
 		void Draw();
+		// VR-only: draw the in-scene composition aids (grid + the selected overlay frame) into the
+		// helper's HMD-anchored HUD plane (the panel is a floating quad, so these can't frame the shot
+		// when drawn on it). No-op on flat screen.
+		void DrawVRHud();
 		void DrawOverlays();
 		bool OnFrameUpdate();
 		bool HasOverlay() const;
@@ -76,11 +85,6 @@ namespace PhotoMode
 
 		// kMenu | kActivate | kJumping
 		static constexpr auto controlFlags = static_cast<RE::ControlMap::UEFlag>(1036);
-
-		// VR defers the freeze-on-start until the photo clone has streamed in (a freeze stalls its
-		// 3D load). Set on activate, cleared once applied or on deactivate.
-		bool          pendingVRFreeze{ false };
-		std::uint32_t vrFreezeDelay{ 0 };  // fallback frame counter if the clone never readies
 
 		static constexpr std::array tabs = {
 			"$PM_Camera",

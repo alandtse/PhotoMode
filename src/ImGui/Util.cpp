@@ -111,7 +111,11 @@ namespace ImGui
 
 		GetCurrentWindow()->DrawList->AddImage((ImU64)texID, pos, pos + texture_size, ImVec2(0, 0), ImVec2(1, 1), colour);
 
-		return MANAGER(Input)->CanNavigateWithMouse() ? IsMouseHoveringRect(pos, pos + texture_size) && IsMouseClicked(0) && (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) == 0 : false;
+		// VR drives the wand as a mouse cursor (the helper sets MousePos + trigger=left-click) but isn't
+		// classified as KBM, so CanNavigateWithMouse() is false. Without treating VR as mouse-driven here
+		// the arrow-cycle widgets (EnumSlider) can never be clicked in-headset.
+		const bool mouseDriven = MANAGER(Input)->CanNavigateWithMouse() || REL::Module::IsVR();
+		return mouseDriven ? IsMouseHoveringRect(pos, pos + texture_size) && IsMouseClicked(0) && (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) == 0 : false;
 	}
 
 	bool IsWidgetFocused()

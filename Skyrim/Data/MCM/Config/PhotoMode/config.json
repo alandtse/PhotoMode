@@ -11,6 +11,10 @@
       "cursorFillMode": "topToBottom",
       "content": [
         {
+          "text": "$PM_VR_ControlsNote",
+          "type": "header"
+        },
+        {
           "text": "$PM_OpenPhotoMode_Header",
           "type": "header"
         },

@@ -194,6 +194,10 @@ namespace ImGui::Renderer
 				// by hidden — pose/freeze must still tick), then draw + present when it's shown.
 				VR::PumpInput(photoMode->IsActive());
 				if (photoMode->IsActive()) {
+					// Composition aids (grid + overlay frame) live on their own HMD-anchored HUD plane (the
+					// panel is a floating quad that can't frame the shot). Independent of the panel present
+					// below, so draw every active frame — it self-clears when aids are off or UI is hidden.
+					photoMode->DrawVRHud();
 					const bool draw = photoMode->OnFrameUpdate();
 					if (draw && !photoMode->IsHidden()) {
 						ImGui::Styles::GetSingleton()->OnStyleRefresh();
