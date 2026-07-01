@@ -385,6 +385,19 @@
             "formatString": "{0} %",
             "sourceType": "ModSettingInt"
           }
+        },
+        {
+          "id": "iDebugLoadScreen:LoadScreen",
+          "text": "$PM_LoadScreenDebug_Text",
+          "type": "slider",
+          "help": "$PM_LoadScreenDebug_Help",
+          "groupCondition": 1,
+          "valueOptions": {
+            "min": 0,
+            "max": 2,
+            "step": 1,
+            "sourceType": "ModSettingInt"
+          }
         }
       ]
     }

@@ -29,6 +29,11 @@ namespace LoadScreen
 
 		void ApplyScreenshotTexture(RE::BSGeometry* a_canvas) const;
 
+		// VR streams the load-screen model in asynchronously, after InitLoadScreen3D's first setup call;
+		// the AdvanceMovie hook calls this each frame with the model NIF root once it appears, so the
+		// texture lands on Canvas:0 exactly once per load screen (a no-op on SE/AE, which apply inline).
+		void NotifyModelReady(RE::NiNode* a_model);
+
 	private:
 		Type        GetScreenshotModelType() const;
 		std::string GetScreenshotTexture() const;
@@ -36,6 +41,7 @@ namespace LoadScreen
 		// members
 		std::int32_t fullscreenChance{ 50 };
 		std::int32_t paintingChance{ 50 };
+		std::int32_t debugForceType{ 0 };  // 0 = normal, 1 = always fullscreen, 2 = always painting (testing)
 
 		std::vector<RE::TESObjectSTAT*> paintingModels{};
 		Transform                       paintingTransform{ 0.6f, RE::NiPoint3(), RE::NiPoint3() };
@@ -47,6 +53,7 @@ namespace LoadScreen
 			RE::TESObjectSTAT* obj{};
 			Type               type{ Type::kNone };
 			std::string        texturePath{};
+			bool               applied{ false };  // VR: texture already landed on this load screen's canvas
 
 		} current;
 	};

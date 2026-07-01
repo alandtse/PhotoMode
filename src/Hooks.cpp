@@ -112,14 +112,50 @@ namespace LoadScreen
 		{
 			if (auto transform = MANAGER(LoadScreen)->GetModelTransform()) {
 				func(a_this, transform->scale, transform->rotationalOffset, transform->translateOffset, MANAGER(LoadScreen)->GetCameraShotPath(a_cameraShotPath));
-				if (const auto canvas = MISTMENU_DATA(a_this).loadScreenModel ? MISTMENU_DATA(a_this).loadScreenModel->GetObjectByName("Canvas:0") : nullptr) {
-					MANAGER(LoadScreen)->ApplyScreenshotTexture(canvas->AsGeometry());
-				}
+				// SE/AE have the model loaded by now, so texture it inline. VR streams it in asynchronously
+				// after this call returns; MistMenuAdvanceMovie applies it once it arrives (see below).
+				MANAGER(LoadScreen)->NotifyModelReady(MISTMENU_DATA(a_this).loadScreenModel.get());
 			} else {
 				func(a_this, a_scale, a_rotateOffset, a_translateOffset, a_cameraShotPath);
 			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	// VR-only: the load-screen model NIF streams in asynchronously, so it is not present when the
+	// InitLoadScreen3D setup call above runs. MistMenu::AdvanceMovie re-runs setup once the model lands;
+	// we piggyback there to texture the canvas. In VR the +0xE0 slot (CommonLib's cameraPathNode) holds a
+	// BSResource entry, not the node directly -- its name field is the model path, so walking it as a node
+	// crashes. Detect: if the slot's first qword is a vtable in the game module it is the NiNode itself;
+	// otherwise it is the entry and the NiPointer<NiNode> lives at entry+0x28 (BSResource::Entry::data).
+	RE::NiNode* ResolveLoadScreenModel(RE::MistMenu* a_this)
+	{
+		const auto slot = reinterpret_cast<std::uintptr_t>(MISTMENU_DATA(a_this).cameraPathNode.get());
+		if (!slot) {
+			return nullptr;
+		}
+		const auto base = REL::Module::get().base();
+		const auto first = *reinterpret_cast<std::uintptr_t*>(slot);
+		if (first >= base && first < base + 0x4000000) {  // looks like a NiObject vtable -> node itself
+			return reinterpret_cast<RE::NiNode*>(slot);
+		}
+		return *reinterpret_cast<RE::NiNode**>(slot + 0x28);  // BSResource::Entry::data (NiPointer<NiNode>)
+	}
+
+	struct MistMenuAdvanceMovie
+	{
+		static void thunk(RE::MistMenu* a_this, float a_interval, std::uint32_t a_currentTime)
+		{
+			func(a_this, a_interval, a_currentTime);
+			// Only touch the model once the engine finished its deferred load-screen setup on it (the
+			// cameraPathNode tree is fully built); before that we'd race the async loader and walk a
+			// half-built node. loadScreenModelReady is the engine's "load-screen setup done" flag.
+			if (const auto vrData = a_this->GetVRRuntimeData(); vrData && vrData->loadScreenModelReady) {
+				MANAGER(LoadScreen)->NotifyModelReady(ResolveLoadScreenModel(a_this));
+			}
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+		static inline constexpr std::size_t            idx{ 0x5 };  // IMenu::AdvanceMovie
 	};
 
 	void InstallHooks()
@@ -129,6 +165,10 @@ namespace LoadScreen
 
 		REL::Relocation<std::uintptr_t> target2{ RELOCATION_ID(51454, 52313), OFFSET_3(0x1D1, 0x1C3, 0x210) };
 		stl::write_thunk_call<InitLoadScreen3D>(target2.address());
+
+		if (REL::Module::IsVR()) {
+			stl::write_vfunc<RE::MistMenu, MistMenuAdvanceMovie>();
+		}
 	}
 }
 
