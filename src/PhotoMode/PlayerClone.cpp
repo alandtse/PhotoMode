@@ -76,6 +76,12 @@ namespace PhotoMode
 		static_cast<RE::BGSAttackDataForm*>(a_clone)->attackDataMap =
 			static_cast<RE::BGSAttackDataForm*>(a_playerBase)->attackDataMap;
 
+		// combatStyle isn't covered by any TEMPLATE_USE_FLAG we borrow from the Mannequin, so it's also
+		// null on a fresh base -- the background combat-evaluation job (queued on interaction/activation)
+		// dereferences it and CTDs. StopCombat() at spawn keeps the clone out of actual combat regardless
+		// of whose style this is.
+		a_clone->SetCombatStyle(a_playerBase->GetCombatStyle());
+
 		// Match the player's hair so helmets/face render correctly.
 		for (std::int8_t i = 0; i < a_playerBase->numHeadParts; ++i) {
 			if (const auto headPart = a_playerBase->headParts ? a_playerBase->headParts[i] : nullptr;
@@ -206,8 +212,13 @@ namespace PhotoMode
 				cloneBase->actorData.actorBaseFlags.set(RE::ACTOR_BASE_DATA::Flag::kUsesTemplate);
 				// Borrow only the AI brain. NOT kAttackData: the Mannequin has no attack-data map, and
 				// CopyFromTemplateForms would overwrite the valid one we copy in UpdateAppearance with
-				// the Mannequin's null.
-				cloneBase->actorData.templateUseFlags.set(TUF::kAIData, TUF::kAIPackages, TUF::kAIDefPackList);
+				// the Mannequin's null. kSpells is included because a fresh base's null/uninitialized
+				// spell list crashes the background combat job's spell-gathering pass once time is
+				// unfrozen and the AI actually starts ticking (RE'd from a CTD in Actor::UpdateCombat).
+				cloneBase->actorData.templateUseFlags.set(TUF::kAIData, TUF::kAIPackages, TUF::kAIDefPackList, TUF::kSpells);
+				// Borrowing a real AI brain also gives the clone ambient/idle Hello barks; drop the voice
+				// type so it has nothing to say (idle animation and expressions are unaffected).
+				cloneBase->SetObjectVoiceType(nullptr);
 			} else {
 				logger::warn("PlayerClone: vanilla Mannequin base (0x89A85) not found; clone may be inert"sv);
 			}
@@ -226,6 +237,7 @@ namespace PhotoMode
 			// AI stays enabled so the clone gains a high process (facegen data + idle playback); the
 			// Character tab's do-nothing package keeps it standing still.
 			cloneActor->StopCombat();
+			cloneActor->AllowPCDialogue(false);  // let the player still grab/pose it; just no "Talk" prompt
 			CopyWornEquipment(cloneActor, player);
 			cloneActor->DoReset3D(true);  // rebuild the biped so the equipped gear renders
 		}
@@ -234,14 +246,29 @@ namespace PhotoMode
 
 	void PlayerClone::ApplyPose()
 	{
+		const auto cloneRefPtr = cloneRef.get();
+		const auto cloneActor = cloneRefPtr ? cloneRefPtr->As<RE::Actor>() : nullptr;
+		if (!cloneActor) {
+			return;
+		}
+
+		const auto player = RE::PlayerCharacter::GetSingleton();
+
+		// The borrowed AI brain lets the running package interrupt for Hellos/idle chatter/reactions to
+		// the player being nearby (RE::TESPackage::InterruptFlag) -- the voice-type/AllowPCDialogue calls
+		// in Spawn() don't cover this (those only stop player-initiated dialogue, not the AI's own
+		// attempts), and the AI periodically re-evaluates/refreshes its package, undoing a one-time
+		// clear. Clearing the per-instance override (not the shared package form) every frame keeps it
+		// silenced regardless.
+		if (const auto proc = cloneActor->GetActorRuntimeData().currentProcess) {
+			proc->currentPackage.modifiedInterruptFlag = 0;
+		}
+
 		if (poseApplied) {
 			return;
 		}
 
-		const auto cloneRefPtr = cloneRef.get();
-		const auto cloneActor = cloneRefPtr ? cloneRefPtr->As<RE::Actor>() : nullptr;
-		const auto player = RE::PlayerCharacter::GetSingleton();
-		if (!cloneActor || !player) {
+		if (!player) {
 			return;
 		}
 
@@ -276,12 +303,18 @@ namespace PhotoMode
 		}
 
 		// PlaceObjectAtMe spawns the clone overlapping the player capsule, so the solver shoves it out
-		// (it lands in front). Stop its sim (a static display actor never needs live collision) and
-		// teleport it back to the captured spot.
+		// (it lands in front). Suspend sim just long enough to teleport it back without being shoved
+		// again, then re-enable it: kNoSim disables the character controller's entire simulation pass
+		// (ground support, gravity-on-ground), not just movement, so leaving it off let the clone's own
+		// idle animation and HIGGS's ragdoll-bone grabbing desync from the ground with nothing
+		// reconciling position/orientation against the terrain -- it needs normal sim to stay upright.
 		if (const auto charController = cloneActor->GetCharController()) {
 			charController->flags.set(RE::CHARACTER_FLAGS::kNoSim);
+			cloneActor->SetPosition(spawnPos, true);
+			charController->flags.reset(RE::CHARACTER_FLAGS::kNoSim);
+		} else {
+			cloneActor->SetPosition(spawnPos, true);
 		}
-		cloneActor->SetPosition(spawnPos, true);
 
 		// Now that the clone's 3D exists, replay the player's active-effect visuals and the
 		// readied-spell charge art onto it.
