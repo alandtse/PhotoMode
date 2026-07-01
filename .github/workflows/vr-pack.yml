@@ -1,0 +1,163 @@
+# Counterpart to powerof3's pack.yml: the fork's single entry for building and
+# releasing the universal NG DLL (one binary that runtime-detects SE/AE/VR). Called by
+# main.yml's owner-gated `vr` job and published as the VR Nexus mod (184058) only — the
+# original SE/AE listing (91701) stays powerof3's own release, built via their own
+# pipeline in the `run` job below.
+#
+# - build runs on every trigger (CI).
+# - On a version tag vX.Y.Z.W (upstream X.Y.Z + the VR patch from VR_VERSION, the same
+#   scheme AE uses), it also verifies the tag matches CMakeLists, packages the mod .7z
+#   (Data assets + plugin), publishes the GitHub Release, and runs the Nexus upload
+#   (dry-run unless NEXUS_AUTO_UPLOAD=true).
+#
+# Why this isn't pack.yml: that workflow checks out with submodules:false, so it can't
+# build against our extern/CommonLibVR submodule, and its publish path is powerof3's
+# Nexus pipeline rather than alandtse/nexus-workflows.
+name: "VR pack"
+
+on:
+  workflow_call:
+    secrets:
+      UNEX_NEXUSMODS_SESSION_COOKIE:
+        required: false
+      UNEX_APIKEY:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (CMake · vs2022 · Release)
+    runs-on: windows-2022
+    outputs:
+      artifact-name: photomode-vr-binaries
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # The runner ships vcpkg but exposes it as VCPKG_INSTALLATION_ROOT; the preset's
+      # toolchain reads VCPKG_ROOT, so bridge them.
+      - name: Set VCPKG_ROOT
+        shell: pwsh
+        run: echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+
+      # Manifest-mode packages are restored from the binary archive cache keyed on the
+      # manifest, so only a dependency bump triggers a full rebuild of the static deps.
+      - name: Cache vcpkg binary archives
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-
+
+      - name: Configure
+        run: cmake --preset vs2022-windows-vcpkg -DCOPY_BUILD=OFF
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Stage binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path staging | Out-Null
+          Copy-Item build/Release/po3_PhotoMode.dll staging/
+          Copy-Item build/Release/po3_PhotoMode.pdb staging/
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: photomode-vr-binaries
+          path: staging/*
+          if-no-files-found: error
+
+  verify:
+    name: Verify tag matches CMake version
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
+      nexus_version: ${{ steps.v.outputs.nexus_version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          base=$(grep -oP 'set\(VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)
+          vr=$(grep -oP 'set\(VR_VERSION \K[0-9]+' CMakeLists.txt | head -1)
+          expected="${base}.${vr}"
+          if [ "$version" != "$expected" ]; then
+            echo "::error::Tag '$tag' (version $version) != CMake version $expected (VERSION.VR_VERSION). Bump VR_VERSION/VERSION or fix the tag." >&2
+            exit 1
+          fi
+          # Nexus shows the 3-part upstream version for the base build; the trailing VR
+          # `.0` is dropped. A re-release on the same base (.1+) keeps all four parts.
+          nexus_version="${version%.0}"
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "nexus_version=$nexus_version"
+          } >> "$GITHUB_OUTPUT"
+
+  package:
+    name: Package & publish
+    needs: [build, verify]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release and attach the archive
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: bin
+
+      - name: Assemble mod archive
+        id: pkg
+        run: |
+          set -euo pipefail
+          ver="${{ needs.verify.outputs.nexus_version }}"
+          # Hyphenated archive name (no spaces) for safe handling downstream; the Nexus
+          # display name is set separately via mod_filename.
+          stage="PhotoMode-VR-${ver}"
+          mkdir -p "$stage/SKSE/Plugins"
+          cp -r Skyrim/Data/. "$stage/"
+          cp bin/po3_PhotoMode.dll bin/po3_PhotoMode.pdb "$stage/SKSE/Plugins/"
+          sudo apt-get update && sudo apt-get install -y p7zip-full
+          7z a -t7z -mx=9 "${stage}.7z" "$stage"
+          echo "archive=${stage}.7z" >> "$GITHUB_OUTPUT"
+          7z l "${stage}.7z"
+
+      - name: Create release and attach archive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.verify.outputs.tag }}
+          ARCHIVE: ${{ steps.pkg.outputs.archive }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
+          gh release upload "$TAG" "$ARCHIVE" --clobber
+
+  nexus:
+    name: Nexus upload
+    needs: [verify, package]
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/nexus-upload.yaml
+    with:
+      tag: ${{ needs.verify.outputs.tag }}
+      mod_version: ${{ needs.verify.outputs.nexus_version }}
+      dry_run: ${{ vars.NEXUS_AUTO_UPLOAD == 'true' && 'false' || 'true' }}
+    secrets:
+      UNEX_NEXUSMODS_SESSION_COOKIE: ${{ secrets.UNEX_NEXUSMODS_SESSION_COOKIE }}
+      UNEX_APIKEY: ${{ secrets.UNEX_APIKEY }}

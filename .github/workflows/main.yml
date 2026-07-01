@@ -2,15 +2,19 @@ name: Main
 
 on:
   push:
-    branches: '**'
-    tags: '*'
+    branches: "**"
+    tags: "*"
 
 concurrency:
   group: ${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # The fork and upstream build different targets from the same trigger, selected by
+  # owner: powerof3 ships SE/AE single-runtime via pack-skse-mod; alandtse ships the VR
+  # multiruntime. Each builds on push and releases on a version tag.
   run:
+    if: github.repository_owner == 'powerof3'
     uses: adya/pack-skse-mod/.github/workflows/pack.yml@main
     with:
       AE_353_BRANCH: master
@@ -19,13 +23,20 @@ jobs:
       FOMOD_MOD_NAME: "PhotoMode"
       FOMOD_MOD_AUTHOR: "powerofthree"
       FOMOD_MOD_NEXUS_ID: "91701"
-      FOMOD_AE353_PATH: 'AE640/SKSE/Plugins'
+      FOMOD_AE353_PATH: "AE640/SKSE/Plugins"
       FOMOD_AE353_NAME: 'SSE v1.6.640 ("Anniversary Edition")'
-      FOMOD_AE353_DESCR: 'Select this if you are using Skyrim Anniversary Edition v1.6.640'
-      FOMOD_AE353_MIN_GAME_VERSION: '1.6.629.0'
+      FOMOD_AE353_DESCR: "Select this if you are using Skyrim Anniversary Edition v1.6.640"
+      FOMOD_AE353_MIN_GAME_VERSION: "1.6.629.0"
       FOMOD_AE_NAME: 'SSE v1.6.1130+ ("Anniversary Edition")'
-      FOMOD_AE_DESCR: 'Select this if you are using Skyrim Anniversary Edition v1.6.1130 or higher (latest update).'
-      FOMOD_AE_MIN_GAME_VERSION: '1.6.1130.0'
+      FOMOD_AE_DESCR: "Select this if you are using Skyrim Anniversary Edition v1.6.1130 or higher (latest update)."
+      FOMOD_AE_MIN_GAME_VERSION: "1.6.1130.0"
       FOMOD_REQUIRED_INSTALLATION_DIR: "Skyrim/Data"
-      PUBLISH_ARCHIVE_TYPE: '7z'
-      VCPKG_COMMIT_ID: '14bb451131ccf6be50a63a8d9dfe7980e46b5958'
+      PUBLISH_ARCHIVE_TYPE: "7z"
+      VCPKG_COMMIT_ID: "14bb451131ccf6be50a63a8d9dfe7980e46b5958"
+
+  vr:
+    if: github.repository_owner == 'alandtse'
+    permissions:
+      contents: write # vr-pack creates the GitHub Release on a tag
+    uses: ./.github/workflows/vr-pack.yml
+    secrets: inherit
