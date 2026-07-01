@@ -1,7 +1,9 @@
 # Credits & Third-Party Notices
 
-PhotoMode is MIT-licensed (see `LICENSE`). It incorporates or adapts the following
-third-party work; their notices are reproduced below as required by their licenses.
+This fork is [GPL-3.0-or-later](COPYING) with a [modding/linking exception](EXCEPTIONS.md);
+the original PhotoMode by powerofthree is MIT-licensed. It incorporates or adapts the
+following third-party work; their notices are reproduced below as required by their
+licenses.
 
 ## PlayerMannequin — appearance/clone technique (MIT)
 
@@ -43,7 +45,6 @@ The VR build links the header-only client SDK from **ImGuiVRHelper**
 - Source: https://github.com/alandtse/imgui-vr-helper
 - License: LGPL-3.0-or-later (`api/COPYING.LESSER`)
 
-> Note: the `api/` client SDK is LGPL. Because PhotoMode compiles it in statically, LGPL
-> §4 obligations apply to VR distributions (allow the user to relink against a modified
-> ImGuiVRHelper — e.g. ship object files or use a shared library). Confirm the chosen
-> distribution form meets this before release.
+LGPL-3.0-or-later permits combining and conveying the resulting work under GPL-3.0-or-later
+terms (LGPLv3 §4); since this fork is GPL-3.0-or-later, statically linking the `api/`
+client SDK is covered without a separate relinking mechanism.

@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 set(NAME "po3_PhotoMode" CACHE STRING "")
 set(VERSION 2.0.3 CACHE STRING "")
+# VR variant counter appended as the 4th version part. 0 = base (Nexus shows the 3-part
+# upstream version); bump to 1+ for a re-release on the same upstream base (Nexus then
+# shows all 4 parts).
+set(VR_VERSION 0)
 
 # ---- Options ----
 
@@ -29,6 +33,8 @@ macro(find_commonlib_path)
 endmacro()
 
 set_from_environment(VCPKG_ROOT)
+
+set(VERSION ${VERSION}.${VR_VERSION})
 
 # One cross-runtime CommonLibSSE-NG DLL (alandtse/CommonLibVR) for Skyrim SE, AE and VR.
 # Enabling all three runtimes selects SKYRIM_CROSS_VR and defines COMMONLIBSSE_NG, so the
