@@ -16,8 +16,11 @@ namespace LoadScreen
 	{
 		std::vector<std::string> painting_paths;
 
-		std::error_code ec;  // skip gracefully if the painting assets aren't installed
+		std::error_code ec;
 		const auto      iterator = std::filesystem::directory_iterator(R"(Data\Meshes\PhotoMode\Paintings)", ec);
+		if (ec) {
+			logger::info("Painting assets not found, skipping ({})"sv, ec.message());
+		}
 		for (const auto& entry : iterator) {
 			if (entry.exists()) {
 				if (const auto& path = entry.path(); !path.empty() && path.extension() == ".nif") {
@@ -47,7 +50,7 @@ namespace LoadScreen
 		if (debugForceType == 1) {
 			return Type::kFullScreen;  // debug: always fullscreen
 		}
-		if (debugForceType == 2) {
+		if (debugForceType == 2 && !paintingModels.empty()) {
 			return Type::kPainting;  // debug: always painting
 		}
 		if (Screenshot::Manager::GetSingleton()->CanDisplayScreenshotInLoadScreen()) {
@@ -57,7 +60,7 @@ namespace LoadScreen
 			std::int32_t coinFlip = rng.generate<std::int32_t>(0, 1);
 
 			if (coinFlip == 1) {
-				if (paintingChance > 0 && rng.generate<std::int32_t>(0, 100) <= paintingChance) {
+				if (!paintingModels.empty() && paintingChance > 0 && rng.generate<std::int32_t>(0, 100) <= paintingChance) {
 					return Type::kPainting;
 				}
 			}
