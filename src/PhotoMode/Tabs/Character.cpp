@@ -1,5 +1,7 @@
 #include "Character.h"
 
+#include "PhotoMode/Manager.h"
+
 namespace PhotoMode
 {
 	namespace MFG
@@ -181,6 +183,10 @@ namespace PhotoMode
 			a_navigateWithMouse ? ImGui::SetItemDefaultFocus() : ImGui::SetKeyboardFocusHere();
 		}
 
+		// Default off every frame; the Poses tab below turns it back on for as long as it's the active
+		// tab. No-op for any subject that isn't the VR clone.
+		MANAGER(PhotoMode)->SetCloneAIEnabled(character, false);
+
 		if (ImGui::CheckBox(character->IsPlayerRef() ? "$PM_ShowPlayer"_T : "$PM_ShowCharacter"_T, &currentState.visible)) {
 			if (const auto root = character->Get3D()) {
 				root->CullGeometry(!currentState.visible);
@@ -198,6 +204,10 @@ namespace PhotoMode
 				if (character->GetFaceGenAnimationData()) {
 					ImGui::SetNextItemWidth(width);
 					if (ImGui::BeginTabItemEx("$PM_Expressions"_T, nullptr, a_resetTabs ? ImGuiTabItemFlags_SetSelected : 0)) {
+						// Same reason as the Poses tab below: expression/phoneme/modifier morphing needs
+						// AI running to actually tick, even though it's applied directly via mfgData.
+						MANAGER(PhotoMode)->SetCloneAIEnabled(character, true);
+
 						using namespace MFG;
 
 						if (ImGui::EnumSlider("$PM_Expression"_T, &mfgData.expressionData.modifier, expressions)) {
@@ -246,6 +256,12 @@ namespace PhotoMode
 
 				ImGui::SetNextItemWidth(width);
 				if (ImGui::BeginTabItemEx("$PM_Poses"_T)) {
+					// The clone's AI is frozen after its initial pose (see PlayerClone::ApplyPose) so it
+					// can't wander off or talk, but PlayIdle needs AI running to actually animate the
+					// transition -- re-enable it while this tab is open, back off (via the default at the
+					// top of Draw) the moment the user leaves it.
+					MANAGER(PhotoMode)->SetCloneAIEnabled(character, true);
+
 					idles.GetFormResultFromCombo([&](const auto& a_idle) {
 						if (idlePlayed) {
 							RevertIdle();

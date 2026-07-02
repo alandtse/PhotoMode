@@ -251,6 +251,13 @@ namespace PhotoMode
 		return subject;
 	}
 
+	void Manager::SetCloneAIEnabled(RE::Actor* a_actor, bool a_enable)
+	{
+		if (a_actor && a_actor == g_photoClone.GetClone()) {
+			a_actor->EnableAI(a_enable);
+		}
+	}
+
 	void Manager::Activate()
 	{
 		RE::PlaySound("UIMenuOK");

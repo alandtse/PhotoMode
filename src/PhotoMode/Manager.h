@@ -50,6 +50,11 @@ namespace PhotoMode
 		// and returns it. Single source of truth for Activate and the per-frame Draw selection.
 		RE::Actor* EnsureDefaultCharacter();
 
+		// The VR clone's AI is frozen once posed (see PlayerClone::ApplyPose) so it can't wander off or
+		// talk on its own, but that also stops PlayIdle from visibly animating -- no-op for any actor
+		// that isn't the clone, so flat PhotoMode's posing of the player is unaffected.
+		void SetCloneAIEnabled(RE::Actor* a_actor, bool a_enable);
+
 		[[nodiscard]] float GetViewRoll(float a_fallback) const;
 		[[nodiscard]] float GetViewRoll() const;
 		void                SetViewRoll(float a_value);

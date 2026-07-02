@@ -76,11 +76,15 @@ namespace PhotoMode
 		static_cast<RE::BGSAttackDataForm*>(a_clone)->attackDataMap =
 			static_cast<RE::BGSAttackDataForm*>(a_playerBase)->attackDataMap;
 
-		// combatStyle isn't covered by any TEMPLATE_USE_FLAG we borrow from the Mannequin, so it's also
-		// null on a fresh base -- the background combat-evaluation job (queued on interaction/activation)
-		// dereferences it and CTDs. StopCombat() at spawn keeps the clone out of actual combat regardless
-		// of whose style this is.
-		a_clone->SetCombatStyle(a_playerBase->GetCombatStyle());
+		// combatStyle is null on a fresh base, and the background combat-evaluation job (queued on
+		// interaction/activation) dereferences it and CTDs. It's part of the CK's "Traits" template
+		// category (bundled with race/height/weight/voice type), which we deliberately don't borrow from
+		// the Mannequin -- CopyFromTemplateForms would overwrite our own reskin with the Mannequin's. Copy
+		// just this one field from the Mannequin instead of the player, since its combat style is the
+		// inert one actually meant for a display prop; StopCombat() at spawn keeps real combat out either way.
+		if (const auto mannequinBase = RE::TESForm::LookupByID<RE::TESNPC>(0x89A85)) {
+			a_clone->SetCombatStyle(mannequinBase->GetCombatStyle());
+		}
 
 		// Match the player's hair so helmets/face render correctly.
 		for (std::int8_t i = 0; i < a_playerBase->numHeadParts; ++i) {
@@ -219,6 +223,12 @@ namespace PhotoMode
 				// Borrowing a real AI brain also gives the clone ambient/idle Hello barks; drop the voice
 				// type so it has nothing to say (idle animation and expressions are unaffected).
 				cloneBase->SetObjectVoiceType(nullptr);
+
+				// The kAIData template flag doesn't actually resolve every field through the getters --
+				// logged confidence=Average on a fresh base vs. the Mannequin's own Cowardly, meaning a
+				// standing NPC that fights back if provoked instead of one that never engages. aiData is a
+				// plain bitfield struct (no owned pointers), so copy it wholesale rather than borrowing.
+				cloneBase->aiData = mannequinBase->aiData;
 			} else {
 				logger::warn("PlayerClone: vanilla Mannequin base (0x89A85) not found; clone may be inert"sv);
 			}
@@ -234,8 +244,12 @@ namespace PhotoMode
 
 		ref->data.angle = { 0.0f, 0.0f, player->GetAngleZ() };
 		if (const auto cloneActor = ref->As<RE::Actor>()) {
-			// AI stays enabled so the clone gains a high process (facegen data + idle playback); the
-			// Character tab's do-nothing package keeps it standing still.
+			// AI stays on through spawn -- ApplyPose() disables it once the one-shot facegen/expression
+			// setup finishes. AI is what drives expression morphing and idle animation (confirmed: with it
+			// off from the start, the clone goes fully stiff), but it's also what makes the clone walk
+			// away and talk on its own once time passes (the long-documented "mannequins come alive" bug --
+			// real, unpatched mannequins in this game version do the exact same thing). Letting it run just
+			// long enough to bake in a good pose/expression, then freezing it, is the least bad tradeoff.
 			cloneActor->StopCombat();
 			cloneActor->AllowPCDialogue(false);  // let the player still grab/pose it; just no "Talk" prompt
 			CopyWornEquipment(cloneActor, player);
@@ -262,6 +276,14 @@ namespace PhotoMode
 		// silenced regardless.
 		if (const auto proc = cloneActor->GetActorRuntimeData().currentProcess) {
 			proc->currentPackage.modifiedInterruptFlag = 0;
+		}
+
+		// StopCombat() at spawn is a one-shot -- if anything provokes combat afterward (a bump, a HIGGS
+		// grab registering as an impact, a hostile actor drawing it in), nothing stops it from actually
+		// entering and staying in combat. Same class of bug as the interrupt flag above: re-assert it
+		// every frame so a display prop can never actually fight back.
+		if (cloneActor->IsInCombat()) {
+			cloneActor->StopCombat();
 		}
 
 		if (poseApplied) {
@@ -321,6 +343,12 @@ namespace PhotoMode
 		CopyVisualEffects(cloneActor, player);
 		CopyHandMagic(cloneActor, player);
 
+		// The one-shot setup above needed AI on to drive expression morphing and idle animation into a
+		// good resting pose. Freeze it here: left running, the AI eventually walks the clone away and
+		// talks to the player on its own (the same long-standing "mannequins come alive" engine bug real,
+		// unpatched mannequins in this game version also exhibit) -- StopCombat/interrupt-flag suppression
+		// above couldn't fully contain it because it isn't one specific reaction, it's the AI running at all.
+		cloneActor->EnableAI(false);
 		poseApplied = true;
 	}
 
