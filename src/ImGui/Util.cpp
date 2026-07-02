@@ -131,7 +131,12 @@ namespace ImGui
 
 	bool IsWidgetFocused(ImGuiID id)
 	{
-		bool navigateWithMouse = MANAGER(Input)->CanNavigateWithMouse();
+		// VR's wand acts as a mouse cursor but isn't classified KBM, so without this override every
+		// caller here falls to focus-based (NavId) detection -- and VR's NavId shifts far more than a
+		// real mouse/gamepad's ever would (noisy wand input), which read as this widget's hover/focus
+		// state flickering on and off. Same fix already applied ad hoc to CheckBox; this is the shared
+		// utility several other widgets call directly, so it needs it too.
+		bool navigateWithMouse = MANAGER(Input)->CanNavigateWithMouse() || REL::Module::IsVR();
 		return (navigateWithMouse ? GetHoveredID() == id : GetFocusID() == id) &&
 		       (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) == 0;
 	}
