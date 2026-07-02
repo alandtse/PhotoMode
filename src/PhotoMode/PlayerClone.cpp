@@ -242,11 +242,7 @@ namespace PhotoMode
 		}
 		cloneRef = ref->CreateRefHandle();
 
-		// SetAngle (an engine call), not a direct data.angle write: RE'd GetAngleZ() as just a raw
-		// data.angle.z read, but the reverse -- writing data.angle directly -- has no confirmed side
-		// effect on the actual 3D root node transform. SetAngle forces that sync immediately, which
-		// matters below where the skeleton pose copy runs the same frame this angle is (re)set.
-		ref->SetAngle({ 0.0f, 0.0f, player->GetAngleZ() });
+		ref->data.angle = { 0.0f, 0.0f, player->GetAngleZ() };
 		if (const auto cloneActor = ref->As<RE::Actor>()) {
 			// AI stays on through spawn -- ApplyPose() disables it once the one-shot facegen/expression
 			// setup finishes. AI is what drives expression morphing and idle animation (confirmed: with it
@@ -334,62 +330,18 @@ namespace PhotoMode
 		// (ground support, gravity-on-ground), not just movement, so leaving it off let the clone's own
 		// idle animation and HIGGS's ragdoll-bone grabbing desync from the ground with nothing
 		// reconciling position/orientation against the terrain -- it needs normal sim to stay upright.
-		// data.angle is also re-set here, not just at spawn: the AI's idle animation runs between spawn
-		// and here and can turn the actor's facing, so by the time the pose copy below runs, the clone's
-		// actor-level rotation may no longer match the player's -- and the skeleton's Root/COM local
-		// rotation (copied from the player) is only meaningful relative to a matching actor-level frame.
 		if (const auto charController = cloneActor->GetCharController()) {
 			charController->flags.set(RE::CHARACTER_FLAGS::kNoSim);
 			cloneActor->SetPosition(spawnPos, true);
-			cloneRefPtr->SetAngle({ 0.0f, 0.0f, player->GetAngleZ() });
 			charController->flags.reset(RE::CHARACTER_FLAGS::kNoSim);
 		} else {
 			cloneActor->SetPosition(spawnPos, true);
-			cloneRefPtr->SetAngle({ 0.0f, 0.0f, player->GetAngleZ() });
 		}
 
 		// Now that the clone's 3D exists, replay the player's active-effect visuals and the
 		// readied-spell charge art onto it.
 		CopyVisualEffects(cloneActor, player);
 		CopyHandMagic(cloneActor, player);
-
-		// Match the clone's stance to the player's frozen entry pose: copy every bone's local (parent-
-		// relative) transform by name, so the joint articulation carries over. Every other bone's local
-		// rotation is authored assuming its parent chain leads up through "NPC Root [Root]"/"NPC COM
-		// [COM ]" at the player's own orientation -- leaving those two at whatever the clone's idle
-		// animation settled them to (the first attempt at excluding them entirely) put the copied chain
-		// on top of a mismatched parent frame, twisting the whole body. Copy their rotation/scale too, but
-		// keep the clone's own translation on those two specifically -- that's the part that fought the
-		// clone's actor-level position and mislocated effect nodes when the very first attempt copied it
-		// wholesale. Run this last, after AI has settled the clone into its own idle pose, or the
-		// animation graph's next tick (while AI is still briefly on) would immediately overwrite it.
-		if (const auto playerRoot = player->Get3D(false)) {
-			std::unordered_map<std::string, RE::NiTransform> pose;
-			VisitNodes(playerRoot, [&](RE::NiAVObject* a_node) {
-				if (const auto* name = a_node->name.c_str(); name && *name) {
-					pose.insert_or_assign(name, a_node->local);
-				}
-			});
-			VisitNodes(cloneRoot, [&](RE::NiAVObject* a_node) {
-				const auto* name = a_node->name.c_str();
-				if (!name || !*name) {
-					return;
-				}
-				const auto it = pose.find(name);
-				if (it == pose.end()) {
-					return;
-				}
-				const std::string_view nameView{ name };
-				if (nameView.find("Root") != std::string_view::npos || nameView.find("COM") != std::string_view::npos) {
-					a_node->local.rotate = it->second.rotate;
-					a_node->local.scale = it->second.scale;
-				} else {
-					a_node->local = it->second;
-				}
-			});
-			RE::NiUpdateData updateData{};
-			cloneRoot->Update(updateData);
-		}
 
 		// The one-shot setup above needed AI on to drive expression morphing and idle animation into a
 		// good resting pose. Freeze it here: left running, the AI eventually walks the clone away and
