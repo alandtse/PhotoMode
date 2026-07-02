@@ -263,10 +263,10 @@ namespace PhotoMode
 					MANAGER(PhotoMode)->SetCloneAIEnabled(character, true);
 
 					idles.GetFormResultFromCombo([&](const auto& a_idle) {
-						if (idlePlayed) {
-							RevertIdle();
-							idlePlayed = false;
-						}
+						// PlayIdle already stops whatever idle is currently running before starting the new
+						// one (RE'd: AIProcess::SetupSpecialIdle calls StopCurrentIdle internally) -- it
+						// doesn't pass through ResetRoot's neutral pose to do that. Reverting first was
+						// forcing every pose switch to visibly snap to the default stance in between.
 						if (const auto currentProcess = ACTOR_DATA(character).currentProcess) {
 							if (currentProcess->PlayIdle(character, a_idle, nullptr)) {
 								idlePlayed = true;

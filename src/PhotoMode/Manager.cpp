@@ -685,6 +685,27 @@ namespace PhotoMode
 
 	void Manager::Draw()
 	{
+		// TEMP diagnostic: log ImGui's ActiveId/NavId/mouse-down transitions to catch the reported VR
+		// click lockup in the act -- two blind fixes (the helper's off-panel release-forwarding, and
+		// nothing yet on our own widget side) haven't resolved it, so get concrete state instead of
+		// guessing a third time.
+		{
+			static ImGuiID    prevActive = 0;
+			static ImGuiID    prevNav = 0;
+			static bool       prevMouseDown = false;
+			const ImGuiIO&    io = ImGui::GetIO();
+			const ImGuiID     active = ImGui::GetActiveID();
+			const ImGuiID     nav = ImGui::GetCurrentContext()->NavId;
+			const bool        mouseDown = io.MouseDown[0];
+			if (active != prevActive || nav != prevNav || mouseDown != prevMouseDown) {
+				logger::info("PhotoMode: ImGui state -- ActiveId {:#x}->{:#x} NavId {:#x}->{:#x} MouseDown {}->{}"sv,
+					prevActive, active, prevNav, nav, prevMouseDown, mouseDown);
+				prevActive = active;
+				prevNav = nav;
+				prevMouseDown = mouseDown;
+			}
+		}
+
 		ImGui::SetNextWindowPos(ImGui::GetNativeViewportPos());
 		ImGui::SetNextWindowSize(ImGui::GetNativeViewportSize());
 
