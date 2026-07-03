@@ -265,6 +265,15 @@ namespace PhotoMode
 	{
 		if (a_actor && a_actor == g_photoClone.GetClone()) {
 			a_actor->EnableAI(a_enable);
+			if (a_enable) {
+				// Character's constructor already calls this once when the clone's tab entry is first
+				// created, but EnableAI(false) then EnableAI(true) again (Poses/Expressions re-enabling
+				// AI) can leave that override lapsed, falling back to the clone's own borrowed Mannequin
+				// package underneath -- which can have its own location logic and walk the clone off to
+				// wherever it expects, since our pinned spot has nothing to do with that package's
+				// authored location. Re-issuing it every time AI comes back on keeps it pinned regardless.
+				a_actor->InitiateDoNothingPackage();
+			}
 		}
 	}
 
