@@ -323,11 +323,7 @@ namespace PhotoMode
 			return;
 		}
 
-		// Wait for the clone's 3D (head + body) to stream in — it loads a few frames after
-		// PlaceObjectAtMe. The clone poses via its own idle animation (AI is enabled), so there is NO
-		// manual bone-copy: copying the player's bone locals (including the root/COM nodes) offset the
-		// clone's skeleton from its actor position, which mislocated effect art and made the Transforms
-		// sliders apply incorrectly.
+		// Wait for the clone's 3D (head + body) to stream in — it loads a few frames after PlaceObjectAtMe.
 		const auto cloneRoot = cloneActor->Get3D(false);
 		if (!cloneRoot) {
 			return;  // clone 3D not loaded yet — try again next frame
