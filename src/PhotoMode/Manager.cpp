@@ -22,6 +22,14 @@ namespace PhotoMode
 		RE::NiMatrix3 g_vrPlaySpaceOriginRotate{};
 		bool          g_vrPlaySpaceCaptured = false;
 
+		// Set when the freeze shortcut unfreezes time; consumed on the next per-frame update (see
+		// DriveVRCamera's call site) rather than spawning the clone in the same frame the freezeTime
+		// flag flips. Spawn() captures the player's position as the clone's spot, but flipping the flag
+		// alone doesn't guarantee the engine has actually run a frame of simulation with time unfrozen
+		// yet -- capturing position before that could read a value that hasn't settled, spawning the
+		// clone somewhere other than where the player visibly is.
+		bool g_pendingCloneSpawn = false;
+
 		// Close any open game menu that pauses the game so the VR free camera can run.
 		// The helper's in-scene overlay isn't a game menu, so it stays composited.
 		void CloseBlockingMenus()
@@ -404,6 +412,13 @@ namespace PhotoMode
 		// match the clone to the player's frozen entry pose once its 3D has streamed in (no-op
 		// after it applies once)
 		if (REL::Module::IsVR()) {
+			// Consumed here rather than in the freezeTime handler that sets it, so at least one frame
+			// of the engine actually running with time unfrozen elapses before Spawn() captures the
+			// player's position -- see g_pendingCloneSpawn.
+			if (g_pendingCloneSpawn) {
+				g_pendingCloneSpawn = false;
+				g_photoClone.Spawn();
+			}
 			g_photoClone.ApplyPose();
 
 			// Fly the play space (VR has no usable detached camera — see DriveVRCamera), but only while
@@ -435,8 +450,9 @@ namespace PhotoMode
 					SetTimeFrozen(!IsTimeFrozen());
 					// First unfreeze brings in the editable clone — it streams cleanly now time runs,
 					// spawning at the player's spot to replace the frozen body the user was viewing.
+					// Deferred a frame (see g_pendingCloneSpawn) rather than spawned here immediately.
 					if (!IsTimeFrozen() && !g_photoClone.IsSpawned()) {
-						g_photoClone.Spawn();
+						g_pendingCloneSpawn = true;
 					}
 				}
 				if (nextTab) {
