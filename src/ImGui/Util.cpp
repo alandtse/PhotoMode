@@ -143,6 +143,18 @@ namespace ImGui
 
 	bool ActivateOnHover()
 	{
+		// Real gamepad nav has no separate "click" gesture -- moving D-pad/stick focus onto a widget
+		// is the only way to reach it, so focus alone must activate it. VR isn't that: the wand can
+		// rest its cursor/focus on anything just by pointing, and selection is a genuine trigger click
+		// (per !CanNavigateWithMouse(), VR was falling into this same gamepad-style path though, so any
+		// widget that happened to hold nav focus got auto-activated every single frame it was focused
+		// and not yet active -- and since nothing about "focused" requires a fresh edge, this fired
+		// continuously, immediately re-activating a widget the instant something else (e.g. the
+		// helper's stuck-ActiveId watchdog) deactivated it. Read as a widget's hover/active highlight
+		// flickering nonstop while the user did nothing but hold the wand still over it.
+		if (REL::Module::IsVR()) {
+			return false;
+		}
 		if (MANAGER(Input)->IsInputGamepad() || !MANAGER(Input)->CanNavigateWithMouse()) {
 			if (!IsItemActive()) {
 				if (IsItemFocused()) {
