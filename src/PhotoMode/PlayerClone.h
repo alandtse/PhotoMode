@@ -49,6 +49,8 @@ namespace PhotoMode
 			cloneRef = {};
 			poseApplied = false;
 			faceReset = false;
+			positionPinned = false;
+			settleWaitFrames = 0;
 			spawnPose.clear();
 		}
 
@@ -70,5 +72,11 @@ namespace PhotoMode
 		// One-shot: re-run DoReset3D once the head 3D has streamed in, to arm facial animation that
 		// the Spawn-time reset (head not yet loaded) couldn't.
 		bool faceReset{ false };
+		// One-shot: the elevated spawnPos teleport (see ApplyPose) has been done; further calls wait for
+		// it to settle (kSupport) instead of redoing it.
+		bool positionPinned{ false };
+		// Frames spent waiting for the character controller to report grounded after the elevated
+		// teleport, capped so a spot with no ground beneath it can't stall setup forever.
+		int settleWaitFrames{ 0 };
 	};
 }

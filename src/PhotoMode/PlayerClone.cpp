@@ -203,6 +203,8 @@ namespace PhotoMode
 		}
 		poseApplied = false;
 		faceReset = false;
+		positionPinned = false;
+		settleWaitFrames = 0;
 		spawnPose = a_originalPose;
 
 		const auto player = RE::PlayerCharacter::GetSingleton();
@@ -352,21 +354,35 @@ namespace PhotoMode
 		// Pin X/Y exactly, but land a small clearance above the captured Z rather than exactly at it:
 		// the captured spot can be an unusual stance (standing on a raised, non-flat object like a
 		// brazier), and forcing the clone's capsule to that exact Z can embed it slightly into that
-		// object's collision. Held rigid the rest of this one-shot setup (as before), that embed just
-		// sits there, but the moment AI re-enables later for Poses/Expressions, the character controller
-        // (or the AI's own "am I stuck" check) can resolve it by shoving/relocating the clone -- reading
-		// as a teleport. Landing a little high and letting normal sim (kNoSim released right after this
-		// teleport, not held through setup) settle it down the last bit means the clone ends up exactly
-		// where the terrain/object surface actually is, not where spawnPos assumed it was.
+		// object's collision -- reading later as a teleport once something (AI re-enabling for Poses/
+		// Expressions, or just the controller's own ground-support check) resolves the embed.
 		constexpr float kSpawnDropClearance = 60.0f;  // ~2 feet; game units, not meters
 		const auto      charController = cloneActor->GetCharController();
-		if (charController) {
-			charController->flags.set(RE::CHARACTER_FLAGS::kNoSim);
+		if (!positionPinned) {
+			if (charController) {
+				charController->flags.set(RE::CHARACTER_FLAGS::kNoSim);
+			}
+			cloneActor->SetPosition(spawnPos + RE::NiPoint3{ 0.0f, 0.0f, kSpawnDropClearance }, true);
+			if (charController) {
+				charController->flags.reset(RE::CHARACTER_FLAGS::kNoSim);
+			}
+			positionPinned = true;
+			return;  // give the drop at least one real frame before checking on it
 		}
-		cloneActor->SetPosition(spawnPos + RE::NiPoint3{ 0.0f, 0.0f, kSpawnDropClearance }, true);
-		if (charController) {
-			charController->flags.reset(RE::CHARACTER_FLAGS::kNoSim);
+
+		// Releasing kNoSim and finishing setup in the same call, with no frame in between, leaves no
+		// time for gravity to actually run: the clone would still be airborne when EnableAI(false) below
+		// locks things in, then visibly fall over the following frames with AI already disabled -- a
+		// falling humanoid with no dedicated falling animation can blend into a walk/run cycle, reading
+		// as "the clone started walking" rather than "the clone hasn't landed yet". Wait for the
+		// controller to actually report grounded (kSupport) before finishing, capped so a spot with
+		// nothing to land on (still theoretically possible) can't stall setup forever.
+		constexpr int kMaxSettleWaitFrames = 30;  // half a second at 60fps
+		if (charController && !charController->flags.any(RE::CHARACTER_FLAGS::kSupport) && settleWaitFrames < kMaxSettleWaitFrames) {
+			++settleWaitFrames;
+			return;
 		}
+
 		// Restore the player's collision (dropped in Spawn() for this same overlapping-capsule window)
 		// now that the pin has landed -- both sides are clear of each other from here on.
 		player->SetCollision(true);
