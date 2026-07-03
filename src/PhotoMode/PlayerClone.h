@@ -10,14 +10,25 @@ namespace PhotoMode
 	class PlayerClone
 	{
 	public:
-		// a_originalPos/a_originalAngleZ: the player's position/facing captured before anything (the VR
-		// free camera's play-space-flying hack in particular) had a chance to move it -- see the call
-		// site for why a live GetPosition()/GetAngleZ() query at spawn time isn't reliable in VR.
-		void Spawn(const RE::NiPoint3& a_originalPos, float a_originalAngleZ);
+		// Per-bone local (parent-relative) transforms, keyed by node name. Used to snapshot a skeleton
+		// once at a known-good moment (see CapturePose) and reapply it later without re-querying the
+		// live actor, which in VR can already reflect camera-fly-induced drift by the time it matters.
+		using BonePose = std::unordered_map<std::string, RE::NiTransform>;
+
+		// Snapshots every named bone's current local transform. Call this on the player before anything
+		// (the VR free camera's play-space-flying hack in particular) has a chance to move things, and
+		// feed the result into Spawn() -- see its parameter comment for why a live query later isn't
+		// reliable in VR.
+		[[nodiscard]] static BonePose CapturePose(RE::Actor* a_actor);
+
+		// a_originalPos/a_originalAngleZ/a_originalPose: the player's position/facing/skeleton captured
+		// before anything (the VR free camera's play-space-flying hack in particular) had a chance to
+		// move it -- see the call site for why a live query at spawn time isn't reliable in VR.
+		void Spawn(const RE::NiPoint3& a_originalPos, float a_originalAngleZ, const BonePose& a_originalPose);
 		void Despawn();
 		// Per-spawn setup once the clone's 3D has streamed in (call each frame while active; it runs
-		// once): re-arm facial animation, then replay the player's active-effect visuals and readied-
-		// spell charge art. The clone poses itself via idle animation (AI enabled), so no bone-copy.
+		// once): re-arm facial animation, replay the player's active-effect visuals and readied-spell
+		// charge art, then mirror the captured pose onto the clone's skeleton.
 		void               ApplyPose();
 		[[nodiscard]] bool IsSpawned() const { return static_cast<bool>(cloneRef); }
 		// The spawned clone actor, or nullptr. Lets the Character tab target the photographed clone
@@ -38,6 +49,7 @@ namespace PhotoMode
 			cloneRef = {};
 			poseApplied = false;
 			faceReset = false;
+			spawnPose.clear();
 		}
 
 	private:
@@ -52,7 +64,8 @@ namespace PhotoMode
 
 		RE::TESNPC*         cloneBase{ nullptr };  // runtime base, reused across sessions
 		RE::ObjectRefHandle cloneRef{};
-		RE::NiPoint3        spawnPos{};  // the player's exact position at spawn; the clone is pinned here
+		RE::NiPoint3        spawnPos{};      // the player's exact position at spawn; the clone is pinned here
+		BonePose            spawnPose{};     // the player's captured skeleton; mirrored onto the clone once posed
 		bool                poseApplied{ false };
 		// One-shot: re-run DoReset3D once the head 3D has streamed in, to arm facial animation that
 		// the Spawn-time reset (head not yet loaded) couldn't.
