@@ -358,7 +358,7 @@ namespace PhotoMode
 		// as a teleport. Landing a little high and letting normal sim (kNoSim released right after this
 		// teleport, not held through setup) settle it down the last bit means the clone ends up exactly
 		// where the terrain/object surface actually is, not where spawnPos assumed it was.
-		constexpr float kSpawnDropClearance = 40.0f;  // ~1.5 feet; game units, not meters
+		constexpr float kSpawnDropClearance = 60.0f;  // ~2 feet; game units, not meters
 		const auto      charController = cloneActor->GetCharController();
 		if (charController) {
 			charController->flags.set(RE::CHARACTER_FLAGS::kNoSim);
