@@ -235,9 +235,18 @@ namespace PhotoMode
 		}
 		UpdateAppearance(cloneBase, playerBase);
 
+		// The clone spawns exactly where the player is standing, so PlaceObjectAtMe's capsule overlaps
+		// the player's -- kNoSim (below, in ApplyPose) only suspends the CLONE's own collision briefly,
+		// but the PLAYER's side of that same overlap is untouched, so once kNoSim clears the two
+		// capsules can push each other apart on the very next physics tick, after our position pin has
+		// already run. Drop the player's collision too (tcl's actual mechanism) for the same window, so
+		// there's nothing on either side to resolve; ApplyPose restores it once the pin lands.
+		player->SetCollision(false);
+
 		const auto ref = player->PlaceObjectAtMe(cloneBase, true);
 		if (!ref) {
 			logger::error("PlayerClone: PlaceObjectAtMe failed"sv);
+			player->SetCollision(true);  // don't leave the player permanently collision-free on failure
 			return;
 		}
 		cloneRef = ref->CreateRefHandle();
@@ -337,6 +346,9 @@ namespace PhotoMode
 		} else {
 			cloneActor->SetPosition(spawnPos, true);
 		}
+		// Restore the player's collision (dropped in Spawn() for this same overlapping-capsule window)
+		// now that the pin has landed -- both sides are clear of each other from here on.
+		player->SetCollision(true);
 
 		// Now that the clone's 3D exists, replay the player's active-effect visuals and the
 		// readied-spell charge art onto it.
