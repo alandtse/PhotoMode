@@ -349,20 +349,24 @@ namespace PhotoMode
 			}
 		}
 
-		// PlaceObjectAtMe spawns the clone overlapping the player capsule, so the solver shoves it out
-		// (it lands in front). kNoSim disables the character controller's entire simulation pass (ground
-		// support, gravity-on-ground), not just movement -- held only through this teleport before, any
-		// mismatch between the clone's capsule and the terrain at the exact captured spot (or simply the
-		// clone's own idle animation starting up right as AI briefly re-enables below) could get resolved
-		// by the controller the instant sim resumed, reading as the clone visibly popping/teleporting a
-		// short distance right after landing correctly. Held through the rest of this one-shot setup
-		// instead -- released alongside EnableAI(false) at the very end, once nothing is left driving
-		// further movement -- so nothing can touch the clone's position while it's mid-setup.
-		const auto charController = cloneActor->GetCharController();
+		// Pin X/Y exactly, but land a small clearance above the captured Z rather than exactly at it:
+		// the captured spot can be an unusual stance (standing on a raised, non-flat object like a
+		// brazier), and forcing the clone's capsule to that exact Z can embed it slightly into that
+		// object's collision. Held rigid the rest of this one-shot setup (as before), that embed just
+		// sits there, but the moment AI re-enables later for Poses/Expressions, the character controller
+        // (or the AI's own "am I stuck" check) can resolve it by shoving/relocating the clone -- reading
+		// as a teleport. Landing a little high and letting normal sim (kNoSim released right after this
+		// teleport, not held through setup) settle it down the last bit means the clone ends up exactly
+		// where the terrain/object surface actually is, not where spawnPos assumed it was.
+		constexpr float kSpawnDropClearance = 10.0f;  // ~a few inches; game units, not meters
+		const auto      charController = cloneActor->GetCharController();
 		if (charController) {
 			charController->flags.set(RE::CHARACTER_FLAGS::kNoSim);
 		}
-		cloneActor->SetPosition(spawnPos, true);
+		cloneActor->SetPosition(spawnPos + RE::NiPoint3{ 0.0f, 0.0f, kSpawnDropClearance }, true);
+		if (charController) {
+			charController->flags.reset(RE::CHARACTER_FLAGS::kNoSim);
+		}
 		// Restore the player's collision (dropped in Spawn() for this same overlapping-capsule window)
 		// now that the pin has landed -- both sides are clear of each other from here on.
 		player->SetCollision(true);
@@ -409,11 +413,6 @@ namespace PhotoMode
 		// unpatched mannequins in this game version also exhibit) -- StopCombat/interrupt-flag suppression
 		// above couldn't fully contain it because it isn't one specific reaction, it's the AI running at all.
 		cloneActor->EnableAI(false);
-		// Release the pin now, in the same breath as disabling AI: nothing is left driving movement once
-		// AI is off, so normal sim can resume without anything having a chance to bump the clone first.
-		if (charController) {
-			charController->flags.reset(RE::CHARACTER_FLAGS::kNoSim);
-		}
 		poseApplied = true;
 	}
 
