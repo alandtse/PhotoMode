@@ -22,12 +22,19 @@ namespace PhotoMode
 		RE::NiMatrix3 g_vrPlaySpaceOriginRotate{};
 		bool          g_vrPlaySpaceCaptured = false;
 
+		// The player's real position/facing at activation, before DriveVRCamera's play-space-flying
+		// hack has moved anything -- fed to PlayerClone::Spawn() instead of a live GetPosition() query.
+		// VR's own room-scale tracking normally turns real physical HMD movement into actual player
+		// position updates, and can't tell our artificial PlayerWorldNode offset apart from a genuine
+		// physical step, so by the time Spawn() runs (especially after flying the camera around while
+		// frozen) a live query may already reflect wherever the camera flew to.
+		RE::NiPoint3 g_originalPlayerPos{};
+		float        g_originalPlayerAngleZ = 0.0f;
+
 		// Set when the freeze shortcut unfreezes time; consumed on the next per-frame update (see
 		// DriveVRCamera's call site) rather than spawning the clone in the same frame the freezeTime
-		// flag flips. Spawn() captures the player's position as the clone's spot, but flipping the flag
-		// alone doesn't guarantee the engine has actually run a frame of simulation with time unfrozen
-		// yet -- capturing position before that could read a value that hasn't settled, spawning the
-		// clone somewhere other than where the player visibly is.
+		// flag flips, so at least one frame of the engine actually running with time unfrozen elapses
+		// first.
 		bool g_pendingCloneSpawn = false;
 
 		// Close any open game menu that pauses the game so the VR free camera can run.
@@ -319,11 +326,17 @@ namespace PhotoMode
 					g_vrPlaySpaceCaptured = true;
 				}
 			}
+			// Also snapshot the player's actual position/facing now, before any flying has happened --
+			// see g_originalPlayerPos.
+			if (player) {
+				g_originalPlayerPos = player->GetPosition();
+				g_originalPlayerAngleZ = player->GetAngleZ();
+			}
 			// Starting frozen keeps the real (frozen) body in place as the subject — don't spawn the
 			// clone yet, since it would stream in half-rendered as a ghost while time is stopped. It's
 			// spawned on the first unfreeze (OnFrameUpdate), when the user wants the editable stand-in.
 			if (!freezeTimeOnStart) {
-				g_photoClone.Spawn();
+				g_photoClone.Spawn(g_originalPlayerPos, g_originalPlayerAngleZ);
 			}
 			CloseBlockingMenus();                 // drop the pause so the free camera runs
 			ImGui::Renderer::VR::RequestFocus();  // own the interactive panel for this session
@@ -412,12 +425,14 @@ namespace PhotoMode
 		// match the clone to the player's frozen entry pose once its 3D has streamed in (no-op
 		// after it applies once)
 		if (REL::Module::IsVR()) {
-			// Consumed here rather than in the freezeTime handler that sets it, so at least one frame
-			// of the engine actually running with time unfrozen elapses before Spawn() captures the
-			// player's position -- see g_pendingCloneSpawn.
+			// Consumed here rather than in the freezeTime handler that sets it, so at least one frame of
+			// the engine actually running with time unfrozen elapses before any of Spawn()'s work runs
+			// -- see g_pendingCloneSpawn. Position/facing themselves come from the activation-time
+			// snapshot (g_originalPlayerPos), not a live query, since that's the value actually proven
+			// reliable (it's what play-space exit restoration already uses).
 			if (g_pendingCloneSpawn) {
 				g_pendingCloneSpawn = false;
-				g_photoClone.Spawn();
+				g_photoClone.Spawn(g_originalPlayerPos, g_originalPlayerAngleZ);
 			}
 			g_photoClone.ApplyPose();
 

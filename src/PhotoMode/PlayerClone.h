@@ -10,7 +10,10 @@ namespace PhotoMode
 	class PlayerClone
 	{
 	public:
-		void Spawn();
+		// a_originalPos/a_originalAngleZ: the player's position/facing captured before anything (the VR
+		// free camera's play-space-flying hack in particular) had a chance to move it -- see the call
+		// site for why a live GetPosition()/GetAngleZ() query at spawn time isn't reliable in VR.
+		void Spawn(const RE::NiPoint3& a_originalPos, float a_originalAngleZ);
 		void Despawn();
 		// Per-spawn setup once the clone's 3D has streamed in (call each frame while active; it runs
 		// once): re-arm facial animation, then replay the player's active-effect visuals and readied-

@@ -183,7 +183,7 @@ namespace PhotoMode
 		applyHand(RE::Actor::SlotTypes::kRightHand, false);
 	}
 
-	void PlayerClone::Spawn()
+	void PlayerClone::Spawn(const RE::NiPoint3& a_originalPos, float a_originalAngleZ)
 	{
 		if (IsSpawned()) {
 			return;
@@ -196,7 +196,13 @@ namespace PhotoMode
 		if (!playerBase) {
 			return;
 		}
-		spawnPos = player->GetPosition();  // pin the clone here; PlaceObjectAtMe shoves it out of the capsule
+		// Pin the clone at the caller-supplied position, not a live player->GetPosition() query: VR's
+		// free-camera fly hack (Manager's DriveVRCamera) offsets PlayerWorldNode to simulate movement,
+		// and the engine's own room-scale tracking -- which normally turns real physical HMD movement
+		// into actual player position updates -- can't tell that offset apart from a genuine physical
+		// step, updating data.location to match. By the time Spawn() runs, GetPosition() may already
+		// reflect wherever the camera flew to rather than where the player was actually standing.
+		spawnPos = a_originalPos;  // pin the clone here; PlaceObjectAtMe shoves it out of the capsule
 
 		if (!cloneBase) {
 			const auto factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::TESNPC>();
@@ -251,7 +257,7 @@ namespace PhotoMode
 		}
 		cloneRef = ref->CreateRefHandle();
 
-		ref->data.angle = { 0.0f, 0.0f, player->GetAngleZ() };
+		ref->data.angle = { 0.0f, 0.0f, a_originalAngleZ };
 		if (const auto cloneActor = ref->As<RE::Actor>()) {
 			// AI stays on through spawn -- ApplyPose() disables it once the one-shot facegen/expression
 			// setup finishes. AI is what drives expression morphing and idle animation (confirmed: with it
