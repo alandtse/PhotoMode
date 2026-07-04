@@ -460,6 +460,13 @@ namespace PhotoMode
 		poseApplied = true;
 	}
 
+	void PlayerClone::RestoreSpawnPose()
+	{
+		if (const auto cloneActor = GetClone()) {
+			ApplyBonePose(cloneActor, spawnPose);
+		}
+	}
+
 	void PlayerClone::ReseatIfDrifted()
 	{
 		if (!anchorSet) {

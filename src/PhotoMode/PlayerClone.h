@@ -45,6 +45,13 @@ namespace PhotoMode
 		// symptoms to apply. Detect that drift directly and snap back rather than chasing each new cause
 		// one at a time.
 		void ReseatIfDrifted();
+		// Re-mirrors the activation-time pose (spawnPose) back onto the clone's skeleton. Poses/
+		// Expressions re-enable AI to let idle playback/expression morphing actually tick, but idle
+		// browsing in particular is meant as a "try this as a starting point" preview, not a permanent
+		// commit -- call this once AI goes back off so leaving either tab reverts the body to the pose
+		// that was already confirmed correct at spawn, while leaving expressions (mfgData, untouched by
+		// this) exactly as set.
+		void RestoreSpawnPose();
 		[[nodiscard]] bool IsSpawned() const { return static_cast<bool>(cloneRef); }
 		// The spawned clone actor, or nullptr. Lets the Character tab target the photographed clone
 		// instead of the (hidden) player in VR.

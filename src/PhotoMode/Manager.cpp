@@ -264,6 +264,11 @@ namespace PhotoMode
 	void Manager::SetCloneAIEnabled(RE::Actor* a_actor, bool a_enable)
 	{
 		if (a_actor && a_actor == g_photoClone.GetClone()) {
+			// Disabled by default every frame regardless of whether Poses/Expressions was ever open this
+			// session (see Character::Draw), so only act on a genuine enabled->disabled transition here --
+			// otherwise RestoreSpawnPose would refight any other hand-posing (VR grab, Transforms tab)
+			// every single frame, not just when actually leaving those two tabs.
+			const bool wasEnabled = a_actor->IsAIEnabled();
 			a_actor->EnableAI(a_enable);
 			if (a_enable) {
 				// Character's constructor already calls this once when the clone's tab entry is first
@@ -273,6 +278,12 @@ namespace PhotoMode
 				// wherever it expects, since our pinned spot has nothing to do with that package's
 				// authored location. Re-issuing it every time AI comes back on keeps it pinned regardless.
 				a_actor->InitiateDoNothingPackage();
+			} else if (wasEnabled) {
+				// Idle browsing (Poses) in particular is a "try this as a starting point" preview, not a
+				// permanent commit -- revert the body to the pose already confirmed correct at spawn.
+				// ApplyBonePose never touches mfgData, so expression/phoneme/modifier edits (Expressions
+				// tab) are untouched either way.
+				g_photoClone.RestoreSpawnPose();
 			}
 		}
 	}
