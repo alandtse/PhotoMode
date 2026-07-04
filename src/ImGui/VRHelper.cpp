@@ -109,8 +109,12 @@ namespace ImGui::Renderer::VR
 		// focus until the user releases it. We don't request kClientFlag_LiveTool (locomotion
 		// passthrough) -- the free camera flies the play space itself from the panel UI and off-panel
 		// shortcuts, so there's no game locomotion to forward.
+		// HelperCursor (1u << 7, helper >= 1.6 -- raw bit until the pinned SDK ships the
+		// enum): opt into the helper's composited wand dot, replacing the big legible dot
+		// this mod used to draw itself; older helpers ignore the unknown bit.
+		constexpr uint32_t kClientFlag_HelperCursor = 1u << 7;
 		if (g_vrClient.Connect("PhotoMode", Version::NAME.data(),
-				ImGuiVRHelperPluginAPI::kClientFlag_RendersOnFocus)) {
+				ImGuiVRHelperPluginAPI::kClientFlag_RendersOnFocus | kClientFlag_HelperCursor)) {
 			logger::info("Connected to ImGuiVRHelper"sv);
 			RegisterShortcuts();
 		} else {
