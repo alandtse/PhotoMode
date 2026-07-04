@@ -715,6 +715,13 @@ namespace PhotoMode
 		// dangle and the play-space snapshot would restore stale coordinates. Drop both.
 		g_photoClone.Invalidate();
 		g_vrPlaySpaceCaptured = false;
+
+		// Defensive: if a save happened mid-session while the clone's spawn had dropped player collision
+		// (see PlayerClone::Spawn/Despawn) and that actor flag is part of what the save captured, loading
+		// it back would otherwise leave the player permanently collision-free with no in-game recovery.
+		if (const auto player = RE::PlayerCharacter::GetSingleton()) {
+			player->SetCollision(true);
+		}
 	}
 
 	std::pair<ImGui::Texture*, float> Manager::GetOverlay() const

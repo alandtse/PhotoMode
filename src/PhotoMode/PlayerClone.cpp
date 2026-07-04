@@ -537,5 +537,14 @@ namespace PhotoMode
 			ref->SetDelete(true);
 		}
 		cloneRef = {};
+
+		// Spawn() drops player collision for the overlapping-capsule window and ApplyPose restores it
+		// once the settle finishes, but ApplyPose can take several frames to get there. If PhotoMode
+		// exits before it does (a quick toggle, or anything cutting the session short), the player would
+		// be left permanently collision-free in normal gameplay with no in-game way to recover. Restore
+		// unconditionally here as a backstop -- true on an already-true flag is a harmless no-op.
+		if (const auto player = RE::PlayerCharacter::GetSingleton()) {
+			player->SetCollision(true);
+		}
 	}
 }
