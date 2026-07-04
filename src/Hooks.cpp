@@ -181,19 +181,26 @@ namespace VRTFCFix
 	// Reimplement the position writes against [RBX+0xD8] and restore RCX before resuming at +0x6b.
 	//
 	// Verified in SkyrimVR.exe (1.4.15) @ 0x140876880: position = ([rsp+0x20], [rsp+0x24], [rsp+0x28]).
+	// Ghidra-confirmed (adversarial review flagged this, first version used RDI as scratch instead of
+	// RCX): the function stashes its enable/disable bool parameter in DIL at +0x0d, well before this
+	// patched region, and doesn't re-check it (TEST DIL,DIL) until +0x92 -- after our resume point at
+	// +0x6b. RDI is genuinely safe from a callee-saved standpoint (the function's own PUSH/POP RDI
+	// prologue/epilogue restores the caller's value regardless of what we do to it in between), but
+	// clobbering it here destroyed that still-live parameter, making the +0x92 branch effectively read
+	// the FreeCameraState pointer's low byte instead of the real toggle state. Using RCX instead avoids
+	// this entirely -- it's already needed in RCX for the call at +0x6b, so nothing else needs touching.
 	struct Patch : Xbyak::CodeGenerator
 	{
 		explicit Patch(std::uintptr_t a_rtn)
 		{
 			Xbyak::Label retLab;
 
-			mov(rdi, qword[rbx + 0xd8]);     // rdi = FreeCameraState
-			movss(dword[rdi + 0x30], xmm0);  // Position.x = xmm0 (already [rsp+0x20])
-			mov(rcx, rdi);                   // restore RCX = FreeCameraState for the call at +0x6b
+			mov(rcx, qword[rbx + 0xd8]);     // rcx = FreeCameraState (also what the call at +0x6b needs)
+			movss(dword[rcx + 0x30], xmm0);  // Position.x = xmm0 (already [rsp+0x20])
 			movss(xmm1, dword[rsp + 0x24]);
-			movss(dword[rdi + 0x34], xmm1);  // Position.y = [rsp+0x24]
+			movss(dword[rcx + 0x34], xmm1);  // Position.y = [rsp+0x24]
 			movss(xmm0, dword[rsp + 0x28]);
-			movss(dword[rdi + 0x38], xmm0);  // Position.z = [rsp+0x28]
+			movss(dword[rcx + 0x38], xmm0);  // Position.z = [rsp+0x28]
 
 			jmp(ptr[rip + retLab]);
 			L(retLab);
