@@ -419,7 +419,6 @@ namespace PhotoMode
 			stableFrameCount = 0;
 		}
 		lastCheckedZ = currentZ;
-		logger::info("PlayerClone: settle-wait frame={} z={:.1f} stableFrames={}"sv, settleWaitFrames, currentZ, stableFrameCount);
 		if (stableFrameCount < kRequiredStableFrames && settleWaitFrames < kMaxSettleWaitFrames) {
 			++settleWaitFrames;
 			return;
