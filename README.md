@@ -30,9 +30,10 @@ original SE/AE listing above remains powerof3's own separate build.
   - Needed for VR (renders the photo mode UI in-headset)
 
 ## Register Visual Studio as a Generator
-* Open `x64 Native Tools Command Prompt`
-* Run `cmake`
-* Close the cmd window
+
+- Open `x64 Native Tools Command Prompt`
+- Run `cmake`
+- Close the cmd window
 
 ## Building
 
@@ -48,6 +49,7 @@ cmake --build build --config Release
 ```
 
 ## Credits
+
 Third-party code (PlayerMannequin for the VR photo clone, ImGuiVRHelper for in-headset
 rendering) is credited in [CREDITS.md](CREDITS.md).
 

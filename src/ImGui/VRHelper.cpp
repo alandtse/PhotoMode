@@ -81,8 +81,8 @@ namespace ImGui::Renderer::VR
 				const std::vector keys{ saved == defaultPacked ? defaultKeys[0] : Combo(static_cast<D>(saved >> 16), saved & 0xFFFFu) };
 				// On rebind: persist the chord and refresh the legend so it shows the live binding.
 				auto onRebind = [i](const Combo* a_keys, std::size_t a_n) {
-                    SaveBind(g_defs[i].action, a_n > 0 ? a_keys[0].Packed() : 0u);
-                    g_hints[i].button = a_n > 0 ? HintLabel(a_keys[0]) : "(unbound)";
+					SaveBind(g_defs[i].action, a_n > 0 ? a_keys[0].Packed() : 0u);
+					g_hints[i].button = a_n > 0 ? HintLabel(a_keys[0]) : "(unbound)";
 				};
 				g_combos[i] = g_vrClient.AddCombo(d.action, keys, onRebind, defaultKeys, /*offPanel*/ true);
 				g_hints[i] = { d.action, HintLabel(keys[0]) };

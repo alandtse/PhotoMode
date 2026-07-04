@@ -85,7 +85,7 @@ namespace PhotoMode
 
 			ImGui::CheckBox("$PM_DepthOfField"_T, &curDOF.enabled);
 
-		else 
+		else
 
 		const auto& effect = RE::ImageSpaceManager::GetSingleton()->effects[RE::ImageSpaceManager::ImageSpaceEffectEnum::DepthOfField];
 

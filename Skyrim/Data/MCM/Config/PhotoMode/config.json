@@ -3,7 +3,7 @@
   "modName": "PhotoMode",
   "displayName": "$PM_Title_MCM",
   "minMcmVersion": 13,
-  "pluginRequirements": [ "PhotoMode.esp" ],
+  "pluginRequirements": ["PhotoMode.esp"],
   "cursorFillMode": "topToBottom",
   "pages": [
     {
@@ -212,7 +212,7 @@
           "text": "$PM_ControllerButtonScheme_Text",
           "type": "enum",
           "valueOptions": {
-            "options": [ "$PM_AUTODETECT", "$PM_XBOX", "$PM_PLAYSTATION" ],
+            "options": ["$PM_AUTODETECT", "$PM_XBOX", "$PM_PLAYSTATION"],
             "sourceType": "ModSettingInt"
           }
         }

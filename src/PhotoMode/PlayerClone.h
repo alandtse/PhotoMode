@@ -51,7 +51,7 @@ namespace PhotoMode
 		// commit -- call this once AI goes back off so leaving either tab reverts the body to the pose
 		// that was already confirmed correct at spawn, while leaving expressions (mfgData, untouched by
 		// this) exactly as set.
-		void RestoreSpawnPose();
+		void               RestoreSpawnPose();
 		[[nodiscard]] bool IsSpawned() const { return static_cast<bool>(cloneRef); }
 		// The spawned clone actor, or nullptr. Lets the Character tab target the photographed clone
 		// instead of the (hidden) player in VR.
@@ -91,8 +91,8 @@ namespace PhotoMode
 
 		RE::TESNPC*         cloneBase{ nullptr };  // runtime base, reused across sessions
 		RE::ObjectRefHandle cloneRef{};
-		RE::NiPoint3        spawnPos{};      // the player's exact position at spawn; the clone is pinned here
-		BonePose            spawnPose{};     // the player's captured skeleton; mirrored onto the clone once posed
+		RE::NiPoint3        spawnPos{};   // the player's exact position at spawn; the clone is pinned here
+		BonePose            spawnPose{};  // the player's captured skeleton; mirrored onto the clone once posed
 		bool                poseApplied{ false };
 		// One-shot: re-run DoReset3D once the head 3D has streamed in, to arm facial animation that
 		// the Spawn-time reset (head not yet loaded) couldn't.
@@ -103,8 +103,8 @@ namespace PhotoMode
 		// Frames spent waiting for the clone's Z to stop changing after the elevated teleport, capped so
 		// a spot with no ground beneath it can't stall setup forever.
 		int   settleWaitFrames{ 0 };
-		float lastCheckedZ{ 0.0f };     // Z as of the previous settle-wait check
-		int   stableFrameCount{ 0 };    // consecutive checks where Z barely moved
+		float lastCheckedZ{ 0.0f };   // Z as of the previous settle-wait check
+		int   stableFrameCount{ 0 };  // consecutive checks where Z barely moved
 		// The clone's own settled position/facing, captured once at the end of ApplyPose; ReseatIfDrifted
 		// snaps back to this if the clone strays from it afterward.
 		RE::NiPoint3 anchorPos{};

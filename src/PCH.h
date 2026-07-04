@@ -164,13 +164,13 @@ namespace stl
 
 // Engine fields that NG keeps in RUNTIME_DATA blocks are reached through its
 // runtime-detecting accessors. These aliases name the accessor for each struct.
-#define RENDERER_DATA(a_obj)    (a_obj)->GetRuntimeData()
-#define MAIN_DATA(a_obj)        (a_obj)->GetRuntimeData()
-#define ACTOR_DATA(a_obj)       (a_obj)->GetActorRuntimeData()
-#define CAMERA_DATA(a_obj)      (a_obj)->GetRuntimeData2()    // worldFOV etc.
-#define MISTMENU_DATA(a_obj)    (a_obj)->GetRuntimeData()
-#define PLAYER_GAMESTATE(a_obj) (a_obj)->GetGameStatsData()   // byCharGenFlag etc.
-#define CONTROLMAP_DATA(a_obj)  (a_obj)->GetRuntimeData()
+#define RENDERER_DATA(a_obj) (a_obj)->GetRuntimeData()
+#define MAIN_DATA(a_obj) (a_obj)->GetRuntimeData()
+#define ACTOR_DATA(a_obj) (a_obj)->GetActorRuntimeData()
+#define CAMERA_DATA(a_obj) (a_obj)->GetRuntimeData2()  // worldFOV etc.
+#define MISTMENU_DATA(a_obj) (a_obj)->GetRuntimeData()
+#define PLAYER_GAMESTATE(a_obj) (a_obj)->GetGameStatsData()  // byCharGenFlag etc.
+#define CONTROLMAP_DATA(a_obj) (a_obj)->GetRuntimeData()
 #define JOURNALMENU_DATA(a_obj) (a_obj)->GetRuntimeData()
 
 #include "Cache.h"

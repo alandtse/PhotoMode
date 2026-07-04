@@ -13,7 +13,7 @@
     "freetype",
     {
       "name": "imgui",
-      "features": [ "dx11-binding", "win32-binding", "freetype", "wchar32" ]
+      "features": ["dx11-binding", "win32-binding", "freetype", "wchar32"]
     },
     "glaze",
     "nlohmann-json",

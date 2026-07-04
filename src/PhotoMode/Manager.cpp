@@ -28,8 +28,8 @@ namespace PhotoMode
 		// position updates, and can't tell our artificial PlayerWorldNode offset apart from a genuine
 		// physical step, so by the time Spawn() runs (especially after flying the camera around while
 		// frozen) a live query may already reflect wherever the camera flew to.
-		RE::NiPoint3            g_originalPlayerPos{};
-		float                   g_originalPlayerAngleZ = 0.0f;
+		RE::NiPoint3          g_originalPlayerPos{};
+		float                 g_originalPlayerAngleZ = 0.0f;
 		PlayerClone::BonePose g_originalPlayerPose{};  // same reasoning, but the skeleton itself
 
 		// Close any open game menu that pauses the game so the VR free camera can run.
@@ -741,18 +741,18 @@ namespace PhotoMode
 		// nothing yet on our own widget side) haven't resolved it, so get concrete state instead of
 		// guessing a third time.
 		{
-			static ImGuiID    prevActive = 0;
-			static ImGuiID    prevNav = 0;
-			static ImGuiID    prevNavActivate = 0;
-			static bool       prevMouseDown = false;
-			static bool       prevEnterDown = false;
-			const ImGuiIO&    io = ImGui::GetIO();
-			const auto&       g = *ImGui::GetCurrentContext();
-			const ImGuiID     active = g.ActiveId;
-			const ImGuiID     nav = g.NavId;
-			const ImGuiID     navActivate = g.NavActivateId;
-			const bool        mouseDown = io.MouseDown[0];
-			const bool        enterDown = ImGui::IsKeyDown(ImGuiKey_Enter);
+			static ImGuiID prevActive = 0;
+			static ImGuiID prevNav = 0;
+			static ImGuiID prevNavActivate = 0;
+			static bool    prevMouseDown = false;
+			static bool    prevEnterDown = false;
+			const ImGuiIO& io = ImGui::GetIO();
+			const auto&    g = *ImGui::GetCurrentContext();
+			const ImGuiID  active = g.ActiveId;
+			const ImGuiID  nav = g.NavId;
+			const ImGuiID  navActivate = g.NavActivateId;
+			const bool     mouseDown = io.MouseDown[0];
+			const bool     enterDown = ImGui::IsKeyDown(ImGuiKey_Enter);
 			if (active != prevActive || nav != prevNav || navActivate != prevNavActivate || mouseDown != prevMouseDown || enterDown != prevEnterDown) {
 				logger::info("PhotoMode: ImGui state -- ActiveId {:#x}->{:#x} NavId {:#x}->{:#x} NavActivateId {:#x}->{:#x} MouseDown {}->{} EnterDown {}->{}"sv,
 					prevActive, active, prevNav, nav, prevNavActivate, navActivate, prevMouseDown, mouseDown, prevEnterDown, enterDown);
