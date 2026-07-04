@@ -464,11 +464,27 @@ namespace PhotoMode
 			return;
 		}
 
-		// Re-enabling AI for Poses/Expressions can still nudge the clone slightly (its own idle root
-		// motion, or the character controller reacting to something) without necessarily "teleporting"
-		// far enough for the do-nothing-package/settle-wait fixes' symptoms to apply. Position tolerance
-		// is generous enough to not fight normal idle sway; angle tolerance likewise for subtle turning
-		// idles, but anything past either is drift, not intentional animation.
+		// Logged evidence: while AI is actively enabled (Poses/Expressions open), position/angle can
+		// swing by more than any reasonable tolerance as a normal, ongoing part of an idle's own root
+		// motion (a repeating ~10-unit sawtooth was confirmed in testing, not a one-time settle) --
+		// fighting that reads as constantly resetting the clone while it's just doing its idle. Only
+		// check for drift once AI is off: at the instant it turns off, re-anchor to wherever the clone
+		// actually is (whatever pose/idle was chosen becomes the new "correct" spot), then watch for
+		// anything moving it away from that afterward.
+		static bool previousAIEnabled = false;
+		const bool  aiEnabled = cloneActor->IsAIEnabled();
+		if (aiEnabled) {
+			previousAIEnabled = true;
+			return;
+		}
+		if (previousAIEnabled) {
+			anchorPos = cloneActor->GetPosition();
+			anchorAngleZ = cloneActor->GetAngleZ();
+			logger::info("PlayerClone: re-anchored after AI disable pos=({:.1f},{:.1f},{:.1f}) angleZdeg={:.1f}"sv,
+				anchorPos.x, anchorPos.y, anchorPos.z, RE::rad_to_deg(anchorAngleZ));
+		}
+		previousAIEnabled = false;
+
 		constexpr float kPositionDriftTolerance = 10.0f;  // game units
 		constexpr float kAngleDriftToleranceDeg = 10.0f;
 
@@ -484,18 +500,6 @@ namespace PhotoMode
 			angleDriftRad += 2.0f * std::numbers::pi_v<float>;
 		}
 		const float angleDrift = std::abs(RE::rad_to_deg(angleDriftRad));
-
-		// DEBUG: log on every AI-enabled edge, and periodically while AI is enabled, to compare where we
-		// think the clone is against the anchor both during animation and without.
-		static bool previousAIEnabled = false;
-		static int  logThrottle = 0;
-		const bool  aiEnabled = cloneActor->IsAIEnabled();
-		if (aiEnabled != previousAIEnabled || (aiEnabled && ++logThrottle >= 15)) {
-			logThrottle = 0;
-			logger::info("PlayerClone: pos=({:.1f},{:.1f},{:.1f}) anchor=({:.1f},{:.1f},{:.1f}) posDrift={:.1f} angleDrift={:.1f}deg aiEnabled={}"sv,
-				currentPos.x, currentPos.y, currentPos.z, anchorPos.x, anchorPos.y, anchorPos.z, posDrift, angleDrift, aiEnabled);
-		}
-		previousAIEnabled = aiEnabled;
 
 		if (posDrift > kPositionDriftTolerance || angleDrift > kAngleDriftToleranceDeg) {
 			logger::info("PlayerClone: reseating after drift (pos={:.1f} angle={:.1f}deg)"sv, posDrift, angleDrift);
