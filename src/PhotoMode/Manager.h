@@ -54,6 +54,13 @@ namespace PhotoMode
 		// talk on its own, but that also stops PlayIdle from visibly animating -- no-op for any actor
 		// that isn't the clone, so flat PhotoMode's posing of the player is unaffected.
 		void SetCloneAIEnabled(RE::Actor* a_actor, bool a_enable);
+		// Call every frame while the Expressions tab is open (after SetCloneAIEnabled(true)): AI being on
+		// drives the whole animation graph, not just explicit idle picks, so the clone's ambient/default
+		// animation can drift the body even without anyone touching the idle combo box. Poses tab wants
+		// that (the idle playing IS the point); Expressions doesn't -- it should only move the face.
+		// Continuously re-pins the body to the spawn pose while this tab is active. No-op for any actor
+		// that isn't the clone.
+		void HoldCloneBodyPose(RE::Actor* a_actor);
 
 		[[nodiscard]] float GetViewRoll(float a_fallback) const;
 		[[nodiscard]] float GetViewRoll() const;

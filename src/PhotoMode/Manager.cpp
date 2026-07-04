@@ -285,6 +285,13 @@ namespace PhotoMode
 		}
 	}
 
+	void Manager::HoldCloneBodyPose(RE::Actor* a_actor)
+	{
+		if (a_actor && a_actor == g_photoClone.GetClone()) {
+			g_photoClone.RestoreSpawnPose();
+		}
+	}
+
 	void Manager::Activate()
 	{
 		RE::PlaySound("UIMenuOK");

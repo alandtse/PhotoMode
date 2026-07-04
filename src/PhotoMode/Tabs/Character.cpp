@@ -207,6 +207,10 @@ namespace PhotoMode
 						// Same reason as the Poses tab below: expression/phoneme/modifier morphing needs
 						// AI running to actually tick, even though it's applied directly via mfgData.
 						MANAGER(PhotoMode)->SetCloneAIEnabled(character, true);
+						// AI being on drives the whole animation graph, not just explicit idle picks --
+						// unlike Poses (where the idle playing is the point), this tab should only ever
+						// move the face, so continuously re-pin the body against any ambient drift.
+						MANAGER(PhotoMode)->HoldCloneBodyPose(character);
 
 						using namespace MFG;
 
