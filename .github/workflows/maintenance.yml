@@ -4,6 +4,8 @@ on: push
 
 jobs:
   maintenance:
+    # Upstream only; the fork relies on pre-commit.ci for formatting and codegen.
+    if: github.repository_owner == 'powerof3'
     runs-on: ubuntu-latest
 
     steps:
