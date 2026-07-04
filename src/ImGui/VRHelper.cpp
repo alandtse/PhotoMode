@@ -77,8 +77,18 @@ namespace ImGui::Renderer::VR
 				const auto&       d = g_defs[i];
 				const std::vector defaultKeys{ Combo(d.hand, d.key) };
 				const auto        defaultPacked = defaultKeys[0].Packed();
-				const auto        saved = LoadBind(d.action, defaultPacked);
-				const std::vector keys{ saved == defaultPacked ? defaultKeys[0] : Combo(static_cast<D>(saved >> 16), saved & 0xFFFFu) };
+				const auto saved = LoadBind(d.action, defaultPacked);
+				// onRebind persists 0 for an unbound chord (see below), but AddCombo requires a non-empty
+				// initial chord to even register the combo (0 keys registered = 0 combo id, permanently
+				// unrebindable this session -- the helper has no way to set a registered combo's keys
+				// after the fact). Falling back to the default here is the safe bound given that
+				// constraint: a saved "unbound" choice reverts to default on restart instead of staying
+				// unbound (a real gap; fully fixing it needs the helper SDK to expose a way to clear a
+				// registered combo's keys), but never registers the garbage Combo(device=0, key=0) a
+				// naive reconstruction of the unbound sentinel would produce -- IsValid() catches that
+				// (and any other malformed saved value) the same way it catches the deliberate case.
+				const Combo       reconstructed{ static_cast<D>(saved >> 16), saved & 0xFFFFu };
+				const std::vector keys{ (saved == defaultPacked || !reconstructed.IsValid()) ? defaultKeys[0] : reconstructed };
 				// On rebind: persist the chord and refresh the legend so it shows the live binding.
 				auto onRebind = [i](const Combo* a_keys, std::size_t a_n) {
 					SaveBind(g_defs[i].action, a_n > 0 ? a_keys[0].Packed() : 0u);

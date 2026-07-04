@@ -13,8 +13,9 @@ namespace ImGui::Renderer::VR
 	void Connect();
 
 	// Pump VR controller input (laser cursor, trigger, thumbstick) into ImGui while shown.
-	// PhotoMode does NOT request or hold helper focus — the helper owns focus arbitration,
-	// so its picker stays free to switch clients. Call before ImGui::NewFrame.
+	// PhotoMode requests and holds helper focus for the whole session (RequestFocus on
+	// activate, ReleaseFocus on exit — see Manager.cpp), so it owns the interactive panel
+	// throughout rather than competing with other clients per-frame. Call before ImGui::NewFrame.
 	void PumpInput(bool a_shown);
 
 	// Per-frame output: blit to the VR panel when connected, else the normal

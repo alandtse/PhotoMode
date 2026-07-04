@@ -199,7 +199,7 @@ namespace ImGui
 		}
 		EndGroup();
 
-		if (MANAGER(Input)->CanNavigateWithMouse() || REL::Module::IsVR() ? IsItemHovered() : IsItemFocused()) {
+		if ((MANAGER(Input)->CanNavigateWithMouse() || REL::Module::IsVR()) ? IsItemHovered() : IsItemFocused()) {
 			if (IsItemClicked() || IsKeyPressed(ImGuiKey_Space) || IsKeyPressed(ImGuiKey_Enter) || IsKeyPressed(ImGuiKey_GamepadFaceDown)) {
 				*a_toggle = !*a_toggle;
 				selected = true;
