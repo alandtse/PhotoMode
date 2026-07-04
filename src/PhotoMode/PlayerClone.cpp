@@ -492,6 +492,15 @@ namespace PhotoMode
 			return;
 		}
 		if (previousAIEnabled) {
+			// Idle browsing (Poses tab) is a "try this as a starting point" preview, not a permanent
+			// commit -- revert the body to the pose already confirmed correct at spawn. Only ever touches
+			// skeleton bones, so expression/phoneme/modifier edits (Expressions tab, mfgData) are
+			// untouched either way. This is the correct place for it: called once per frame, after all of
+			// a frame's SetCloneAIEnabled calls have settled, so this actually only fires on a genuine
+			// enabled->disabled transition -- doing this inside SetCloneAIEnabled itself refought the
+			// idle every single frame it stayed open (that function runs twice per frame while a tab is
+			// open: disabled by default, then re-enabled by the active tab), never letting it play.
+			RestoreSpawnPose();
 			anchorPos = cloneActor->GetPosition();
 			anchorAngleZ = cloneActor->GetAngleZ();
 			logger::info("PlayerClone: re-anchored after AI disable pos=({:.1f},{:.1f},{:.1f}) angleZdeg={:.1f}"sv,
