@@ -431,7 +431,54 @@ namespace PhotoMode
 		// unpatched mannequins in this game version also exhibit) -- StopCombat/interrupt-flag suppression
 		// above couldn't fully contain it because it isn't one specific reaction, it's the AI running at all.
 		cloneActor->EnableAI(false);
+
+		// Capture where the clone actually settled (not spawnPos -- the drop-and-settle above can land
+		// it on a slightly different Z/orientation than what was captured) as the anchor ReseatIfDrifted
+		// checks against every frame from here on.
+		anchorPos = cloneActor->GetPosition();
+		anchorAngleZ = cloneActor->GetAngleZ();
+		anchorSet = true;
+
 		poseApplied = true;
+	}
+
+	void PlayerClone::ReseatIfDrifted()
+	{
+		if (!anchorSet) {
+			return;
+		}
+		const auto cloneRefPtr = cloneRef.get();
+		const auto cloneActor = cloneRefPtr ? cloneRefPtr->As<RE::Actor>() : nullptr;
+		if (!cloneActor) {
+			return;
+		}
+
+		// Re-enabling AI for Poses/Expressions can still nudge the clone slightly (its own idle root
+		// motion, or the character controller reacting to something) without necessarily "teleporting"
+		// far enough for the do-nothing-package/settle-wait fixes' symptoms to apply. Position tolerance
+		// is generous enough to not fight normal idle sway; angle tolerance likewise for subtle turning
+		// idles, but anything past either is drift, not intentional animation.
+		constexpr float kPositionDriftTolerance = 10.0f;  // game units
+		constexpr float kAngleDriftToleranceDeg = 10.0f;
+
+		const auto  currentPos = cloneActor->GetPosition();
+		const float posDrift = (currentPos - anchorPos).Length();
+
+		// GetAngleZ() is radians; wrap the difference to [-pi, pi] before converting to degrees so e.g.
+		// 359 vs 1 degree reads as 2 degrees apart, not 358.
+		float angleDriftRad = std::fmod(cloneActor->GetAngleZ() - anchorAngleZ, 2.0f * std::numbers::pi_v<float>);
+		if (angleDriftRad > std::numbers::pi_v<float>) {
+			angleDriftRad -= 2.0f * std::numbers::pi_v<float>;
+		} else if (angleDriftRad < -std::numbers::pi_v<float>) {
+			angleDriftRad += 2.0f * std::numbers::pi_v<float>;
+		}
+		const float angleDrift = std::abs(RE::rad_to_deg(angleDriftRad));
+
+		if (posDrift > kPositionDriftTolerance || angleDrift > kAngleDriftToleranceDeg) {
+			logger::info("PlayerClone: reseating after drift (pos={:.1f} angle={:.1f}deg)"sv, posDrift, angleDrift);
+			cloneActor->SetPosition(anchorPos, true);
+			cloneActor->SetAngle({ 0.0f, 0.0f, anchorAngleZ });
+		}
 	}
 
 	void PlayerClone::Despawn()

@@ -37,7 +37,14 @@ namespace PhotoMode
 		// Per-spawn setup once the clone's 3D has streamed in (call each frame while active; it runs
 		// once): re-arm facial animation, replay the player's active-effect visuals and readied-spell
 		// charge art, then mirror the captured pose onto the clone's skeleton.
-		void               ApplyPose();
+		void ApplyPose();
+		// Call every frame while spawned (after ApplyPose). Once the clone has settled into its anchor
+		// spot (position/facing captured at the end of ApplyPose), re-enabling AI for Poses/Expressions
+		// can still nudge it -- a bump from its own idle root motion, or the character controller
+		// reacting to something -- without ever fully "teleporting" far enough for the earlier fixes'
+		// symptoms to apply. Detect that drift directly and snap back rather than chasing each new cause
+		// one at a time.
+		void ReseatIfDrifted();
 		[[nodiscard]] bool IsSpawned() const { return static_cast<bool>(cloneRef); }
 		// The spawned clone actor, or nullptr. Lets the Character tab target the photographed clone
 		// instead of the (hidden) player in VR.
@@ -59,6 +66,7 @@ namespace PhotoMode
 			faceReset = false;
 			positionPinned = false;
 			settleWaitFrames = 0;
+			anchorSet = false;
 			spawnPose.clear();
 		}
 
@@ -86,5 +94,10 @@ namespace PhotoMode
 		// Frames spent waiting for the character controller to report grounded after the elevated
 		// teleport, capped so a spot with no ground beneath it can't stall setup forever.
 		int settleWaitFrames{ 0 };
+		// The clone's own settled position/facing, captured once at the end of ApplyPose; ReseatIfDrifted
+		// snaps back to this if the clone strays from it afterward.
+		RE::NiPoint3 anchorPos{};
+		float        anchorAngleZ{ 0.0f };
+		bool         anchorSet{ false };
 	};
 }

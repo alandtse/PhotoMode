@@ -431,6 +431,7 @@ namespace PhotoMode
 		// after it applies once)
 		if (REL::Module::IsVR()) {
 			g_photoClone.ApplyPose();
+			g_photoClone.ReseatIfDrifted();
 
 			// Fly the play space (VR has no usable detached camera — see DriveVRCamera), but only while
 			// the wand isn't on the panel: when pointing at the menu the thumbstick should scroll it,
