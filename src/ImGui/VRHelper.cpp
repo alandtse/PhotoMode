@@ -77,7 +77,7 @@ namespace ImGui::Renderer::VR
 				const auto&       d = g_defs[i];
 				const std::vector defaultKeys{ Combo(d.hand, d.key) };
 				const auto        defaultPacked = defaultKeys[0].Packed();
-				const auto saved = LoadBind(d.action, defaultPacked);
+				const auto        saved = LoadBind(d.action, defaultPacked);
 				// onRebind persists 0 for an unbound chord (see below), but AddCombo requires a non-empty
 				// initial chord to even register the combo (0 keys registered = 0 combo id, permanently
 				// unrebindable this session -- the helper has no way to set a registered combo's keys
