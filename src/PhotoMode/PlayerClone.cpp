@@ -383,7 +383,7 @@ namespace PhotoMode
 		// brazier), and forcing the clone's capsule to that exact Z can embed it slightly into that
 		// object's collision -- reading later as a teleport once something (AI re-enabling for Poses/
 		// Expressions, or just the controller's own ground-support check) resolves the embed.
-		constexpr float kSpawnDropClearance = 60.0f;  // ~2 feet; game units, not meters
+		constexpr float kSpawnDropClearance = 15.0f;  // ~1/4 of the original 60 -- less to fall, still clears an unusual stance
 		const auto      charController = cloneActor->GetCharController();
 		if (!positionPinned) {
 			if (charController) {
@@ -392,32 +392,39 @@ namespace PhotoMode
 			cloneActor->SetPosition(spawnPos + RE::NiPoint3{ 0.0f, 0.0f, kSpawnDropClearance }, true);
 			if (charController) {
 				charController->flags.reset(RE::CHARACTER_FLAGS::kNoSim);
-				// kSupport doesn't get cleared by SetPosition -- it's confirmed (via logging) to read
-				// stale-true on the very next frame, carrying over ground-contact state from before this
-				// teleport rather than reflecting the new (now airborne) position. Left alone, the wait
-				// below exits immediately, capturing the settle anchor 60 units too high. Force it false so
-				// the controller has to freshly re-earn it once it actually lands.
-				charController->flags.reset(RE::CHARACTER_FLAGS::kSupport);
 			}
+			lastCheckedZ = cloneActor->GetPosition().z;
+			stableFrameCount = 0;
 			positionPinned = true;
 			return;  // give the drop at least one real frame before checking on it
 		}
 
-		// Releasing kNoSim and finishing setup in the same call, with no frame in between, leaves no
-		// time for gravity to actually run: the clone would still be airborne when EnableAI(false) below
-		// locks things in, then visibly fall over the following frames with AI already disabled -- a
-		// falling humanoid with no dedicated falling animation can blend into a walk/run cycle, reading
-		// as "the clone started walking" rather than "the clone hasn't landed yet". Wait for the
-		// controller to actually report grounded (kSupport) before finishing, capped so a spot with
-		// nothing to land on (still theoretically possible) can't stall setup forever.
-		constexpr int kMaxSettleWaitFrames = 30;  // half a second at 60fps
-		const bool    supported = charController && charController->flags.any(RE::CHARACTER_FLAGS::kSupport);
-		logger::info("PlayerClone: settle-wait frame={} z={:.1f} supported={}"sv, settleWaitFrames, cloneActor->GetPosition().z, supported);
-		if (!supported && settleWaitFrames < kMaxSettleWaitFrames) {
+		// Releasing kNoSim and finishing setup in the same call, with no frame in between, leaves no time
+		// for gravity to actually run: the clone would still be airborne when EnableAI(false) below locks
+		// things in, then visibly fall over the following frames with AI already disabled -- a falling
+		// humanoid with no dedicated falling animation can blend into a walk/run cycle, reading as "the
+		// clone started walking" rather than "the clone hasn't landed yet". Wait for it to actually stop
+		// moving instead of asking the character controller if it's grounded: logging confirmed
+		// CHARACTER_FLAGS::kSupport reads stale-true on the very next frame regardless of drop height (a
+		// manual reset didn't help either -- the engine re-derives it as true within that same one-frame
+		// gap), so it can't be trusted here. Position stability can't lie the same way. Capped so a spot
+		// with no ground beneath it can't stall setup forever.
+		constexpr float kSettleEpsilon = 0.5f;  // game units; "hasn't moved" tolerance between frames
+		constexpr int   kRequiredStableFrames = 3;
+		constexpr int   kMaxSettleWaitFrames = 30;  // half a second at 60fps
+		const float     currentZ = cloneActor->GetPosition().z;
+		if (std::abs(currentZ - lastCheckedZ) < kSettleEpsilon) {
+			++stableFrameCount;
+		} else {
+			stableFrameCount = 0;
+		}
+		lastCheckedZ = currentZ;
+		logger::info("PlayerClone: settle-wait frame={} z={:.1f} stableFrames={}"sv, settleWaitFrames, currentZ, stableFrameCount);
+		if (stableFrameCount < kRequiredStableFrames && settleWaitFrames < kMaxSettleWaitFrames) {
 			++settleWaitFrames;
 			return;
 		}
-		logger::info("PlayerClone: settle-wait done at frame={} z={:.1f} (spawnPos.z={:.1f})"sv, settleWaitFrames, cloneActor->GetPosition().z, spawnPos.z);
+		logger::info("PlayerClone: settle-wait done at frame={} z={:.1f} (spawnPos.z={:.1f})"sv, settleWaitFrames, currentZ, spawnPos.z);
 
 		// Restore the player's collision (dropped in Spawn() for this same overlapping-capsule window)
 		// now that the pin has landed -- both sides are clear of each other from here on.
