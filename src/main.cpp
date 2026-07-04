@@ -127,7 +127,11 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 
 	logger::info("Game version : {}", a_skse->RuntimeVersion().string());
 
-	SKSE::AllocTrampoline(128);
+	// Shared by every InstallHooks() in Hooks.cpp -- allocated exactly once, here. A second
+	// AllocTrampoline call anywhere else would free this buffer (SKSE::Trampoline::set_trampoline calls
+	// release() first) out from under whatever hooks had already been written into it. Sized generously
+	// for the 4 write_thunk_call stubs plus VRTFCFix's custom Xbyak patch that all share it (VR only).
+	SKSE::AllocTrampoline(256);
 
 	Settings::GetSingleton()->Load(FileType::kDisplayTweaks, [](auto& ini) {
 		ImGui::Renderer::LoadSettings(ini);  // display tweaks scaling

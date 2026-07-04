@@ -214,7 +214,11 @@ namespace VRTFCFix
 		Patch p{ resume.address() };
 		p.ready();
 
-		SKSE::AllocTrampoline(128);
+		// The shared trampoline is already allocated once in main.cpp's SKSEPlugin_Load -- a second
+		// AllocTrampoline call here would free that buffer (SKSE::Trampoline::set_trampoline calls
+		// release() first), corrupting the stubs PhotoMode/Screenshot/LoadScreen's InstallHooks already
+		// wrote into it (all three run before this, per Hooks::Install's call order), since their JMPs
+		// would then point into freed memory.
 		auto& trampoline = SKSE::GetTrampoline();
 		trampoline.write_branch<5>(
 			target.address(),
