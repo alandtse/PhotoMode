@@ -105,6 +105,15 @@ namespace ImGui::Renderer
 			auto& io = ImGui::GetIO();
 			io.DisplaySize.x = static_cast<float>(screenSize.width);
 			io.DisplaySize.y = static_cast<float>(screenSize.height);
+
+			// When presenting to the helper's VR panel the canvas must match the panel's
+			// exact pixel size (see VR::PanelSize): a game-resolution canvas on a
+			// 1920x1080 panel shrinks the menu toward the top-left while the wand
+			// hit-test spans the full panel, skewing clicks toward bottom-right.
+			if (const auto panel = VR::PanelSize(); panel.x > 0.0f && panel.y > 0.0f) {
+				io.DisplaySize = panel;
+				io.DisplayFramebufferScale = { 1.0f, 1.0f };
+			}
 		}
 		ImGui::NewFrame();
 		{
@@ -113,18 +122,10 @@ namespace ImGui::Renderer
 
 			a_draw();
 		}
-		// In VR the helper points a wand laser at the panel and sets MouseDrawCursor when it
-		// intersects, but ImGui's default software cursor is tiny/invisible at panel scale. Draw a
-		// legible pointer at the laser position ourselves (foreground draw list blits with the panel).
+		// The helper composites its own wand cursor marker over the panel; suppress
+		// ImGui's software cursor so a second (tiny) pointer isn't drawn under it.
 		if (REL::Module::IsVR()) {
-			auto& io = ImGui::GetIO();
-			if (io.MouseDrawCursor) {
-				io.MouseDrawCursor = false;
-				const auto p = io.MousePos;
-				auto*      dl = ImGui::GetForegroundDrawList();
-				dl->AddCircleFilled(p, 7.0f, IM_COL32(255, 255, 255, 240));
-				dl->AddCircle(p, 8.5f, IM_COL32(0, 0, 0, 240), 0, 2.5f);
-			}
+			ImGui::GetIO().MouseDrawCursor = false;
 		}
 		ImGui::EndFrame();
 		ImGui::Render();

@@ -24,6 +24,15 @@ namespace ImGui::Renderer::VR
 
 	bool IsConnected();
 
+	// Exact pixel size of the helper's interactive panel this frame, (0,0) when not
+	// connected or unavailable. The ImGui canvas (io.DisplaySize) must match this 1:1
+	// while presenting to the panel: the stock DX11 backend renders draw data into a
+	// DisplaySize-sized viewport anchored at the panel's top-left, while the helper's
+	// wand hit-test UV spans the full panel — any mismatch shrinks the content toward
+	// (0,0) and skews clicks/the aim dot toward bottom-right. Re-query every frame;
+	// the panel can be resized by the user.
+	ImVec2 PanelSize();
+
 	// Composition HUD overlay: a second, HUD-mode helper client whose transparent HMD-anchored plane
 	// fills the view, so in-scene aids (grid + the selected overlay frame) frame the actual shot (the
 	// main panel is a floating quad). Start on photo-mode activate, Stop on exit; Render every active

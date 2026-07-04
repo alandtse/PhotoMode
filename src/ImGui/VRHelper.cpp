@@ -154,6 +154,17 @@ namespace ImGui::Renderer::VR
 	}
 
 	bool IsConnected() { return g_vrClient.IsConnected(); }
+
+	ImVec2 PanelSize()
+	{
+		if (g_vrClient.IsConnected()) {
+			ImGuiVRHelperPluginAPI::PanelHandle panel{};
+			if (g_vrClient.Helper()->GetPanel(g_vrClient.Id(), &panel) && panel.width && panel.height) {
+				return { static_cast<float>(panel.width), static_cast<float>(panel.height) };
+			}
+		}
+		return { 0.0f, 0.0f };
+	}
 	bool HasFocus() { return g_vrClient.HasFocus(); }
 	bool IsPointerInPanel() { return g_vrClient.IsPointerInPanel(); }
 	// Edge-triggered once per press, via the helper's combo system. Registered off-panel, so Fired()
