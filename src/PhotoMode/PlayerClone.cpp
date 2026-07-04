@@ -405,10 +405,13 @@ namespace PhotoMode
 		// controller to actually report grounded (kSupport) before finishing, capped so a spot with
 		// nothing to land on (still theoretically possible) can't stall setup forever.
 		constexpr int kMaxSettleWaitFrames = 30;  // half a second at 60fps
-		if (charController && !charController->flags.any(RE::CHARACTER_FLAGS::kSupport) && settleWaitFrames < kMaxSettleWaitFrames) {
+		const bool    supported = charController && charController->flags.any(RE::CHARACTER_FLAGS::kSupport);
+		logger::info("PlayerClone: settle-wait frame={} z={:.1f} supported={}"sv, settleWaitFrames, cloneActor->GetPosition().z, supported);
+		if (!supported && settleWaitFrames < kMaxSettleWaitFrames) {
 			++settleWaitFrames;
 			return;
 		}
+		logger::info("PlayerClone: settle-wait done at frame={} z={:.1f} (spawnPos.z={:.1f})"sv, settleWaitFrames, cloneActor->GetPosition().z, spawnPos.z);
 
 		// Restore the player's collision (dropped in Spawn() for this same overlapping-capsule window)
 		// now that the pin has landed -- both sides are clear of each other from here on.
@@ -438,6 +441,8 @@ namespace PhotoMode
 		anchorPos = cloneActor->GetPosition();
 		anchorAngleZ = cloneActor->GetAngleZ();
 		anchorSet = true;
+		logger::info("PlayerClone: anchor captured pos=({:.1f},{:.1f},{:.1f}) angleZdeg={:.1f}"sv,
+			anchorPos.x, anchorPos.y, anchorPos.z, RE::rad_to_deg(anchorAngleZ));
 
 		poseApplied = true;
 	}
@@ -474,10 +479,25 @@ namespace PhotoMode
 		}
 		const float angleDrift = std::abs(RE::rad_to_deg(angleDriftRad));
 
+		// DEBUG: log on every AI-enabled edge, and periodically while AI is enabled, to compare where we
+		// think the clone is against the anchor both during animation and without.
+		static bool previousAIEnabled = false;
+		static int  logThrottle = 0;
+		const bool  aiEnabled = cloneActor->IsAIEnabled();
+		if (aiEnabled != previousAIEnabled || (aiEnabled && ++logThrottle >= 15)) {
+			logThrottle = 0;
+			logger::info("PlayerClone: pos=({:.1f},{:.1f},{:.1f}) anchor=({:.1f},{:.1f},{:.1f}) posDrift={:.1f} angleDrift={:.1f}deg aiEnabled={}"sv,
+				currentPos.x, currentPos.y, currentPos.z, anchorPos.x, anchorPos.y, anchorPos.z, posDrift, angleDrift, aiEnabled);
+		}
+		previousAIEnabled = aiEnabled;
+
+		// DEBUG: actual reseat disabled for now -- log what it WOULD have done instead, so we can see how
+		// the clone settles/moves on its own without this fighting it (suspected culprit for the
+		// "keeps getting teleported a few feet too high" loop: the anchor itself may be captured wrong).
 		if (posDrift > kPositionDriftTolerance || angleDrift > kAngleDriftToleranceDeg) {
-			logger::info("PlayerClone: reseating after drift (pos={:.1f} angle={:.1f}deg)"sv, posDrift, angleDrift);
-			cloneActor->SetPosition(anchorPos, true);
-			cloneActor->SetAngle({ 0.0f, 0.0f, anchorAngleZ });
+			logger::info("PlayerClone: WOULD reseat after drift (pos={:.1f} angle={:.1f}deg) -- reseat disabled for debugging"sv, posDrift, angleDrift);
+			// cloneActor->SetPosition(anchorPos, true);
+			// cloneActor->SetAngle({ 0.0f, 0.0f, anchorAngleZ });
 		}
 	}
 
