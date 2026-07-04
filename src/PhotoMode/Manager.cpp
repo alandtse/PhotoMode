@@ -264,8 +264,8 @@ namespace PhotoMode
 	void Manager::SetCloneAIEnabled(RE::Actor* a_actor, bool a_enable)
 	{
 		if (a_actor && a_actor == g_photoClone.GetClone()) {
-			a_actor->EnableAI(a_enable);
 			if (a_enable) {
+				a_actor->EnableAI(true);
 				// Character's constructor already calls this once when the clone's tab entry is first
 				// created, but EnableAI(false) then EnableAI(true) again (Poses/Expressions re-enabling
 				// AI) can leave that override lapsed, falling back to the clone's own borrowed Mannequin
@@ -273,6 +273,16 @@ namespace PhotoMode
 				// wherever it expects, since our pinned spot has nothing to do with that package's
 				// authored location. Re-issuing it every time AI comes back on keeps it pinned regardless.
 				a_actor->InitiateDoNothingPackage();
+			} else {
+				// Capture whatever pose the idle/expression the user picked left the clone in before
+				// disabling AI, then mirror it straight back onto the clone's own skeleton: the animation
+				// graph is driven by AI, so once it's off the chosen pose is otherwise only as stable as
+				// whatever frame AI happened to stop on. Baking it into the bone locals the same way the
+				// activation-time pose is (see PlayerClone::ApplyPose) means leaving the Poses/Expressions
+				// tab actually keeps the pose the user posed for, rather than leaving it to chance.
+				const auto pose = PlayerClone::CapturePose(a_actor);
+				a_actor->EnableAI(false);
+				PlayerClone::ApplyBonePose(a_actor, pose);
 			}
 		}
 	}

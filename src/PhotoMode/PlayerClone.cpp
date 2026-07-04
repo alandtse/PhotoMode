@@ -196,6 +196,33 @@ namespace PhotoMode
 		return pose;
 	}
 
+	void PlayerClone::ApplyBonePose(RE::Actor* a_actor, const BonePose& a_pose)
+	{
+		const auto root = a_actor ? a_actor->Get3D(false) : nullptr;
+		if (!root || a_pose.empty()) {
+			return;
+		}
+		VisitNodes(root, [&](RE::NiAVObject* a_node) {
+			const auto* name = a_node->name.c_str();
+			if (!name || !*name) {
+				return;
+			}
+			const auto it = a_pose.find(name);
+			if (it == a_pose.end()) {
+				return;
+			}
+			const std::string_view nameView{ name };
+			if (nameView.find("Root") != std::string_view::npos || nameView.find("COM") != std::string_view::npos) {
+				a_node->local.rotate = it->second.rotate;
+				a_node->local.scale = it->second.scale;
+			} else {
+				a_node->local = it->second;
+			}
+		});
+		RE::NiUpdateData updateData{};
+		root->Update(updateData);
+	}
+
 	void PlayerClone::Spawn(const RE::NiPoint3& a_originalPos, float a_originalAngleZ, const BonePose& a_originalPose)
 	{
 		if (IsSpawned()) {
@@ -388,35 +415,10 @@ namespace PhotoMode
 		player->SetCollision(true);
 
 		// Mirror the player's captured pose (spawnPose, taken at activation -- see Spawn()'s parameter
-		// comment for why a live query here isn't reliable in VR) onto the clone's skeleton by node
-		// name: every bone's local (parent-relative) rotation is authored assuming its parent chain
-		// leads up through "NPC Root [Root]"/"NPC COM [COM ]" at the captured orientation, so those two
-		// get their rotation/scale copied too -- but keep the clone's own translation on those two
-		// specifically, since that's the part that fights the clone's actor-level position and
-		// mislocates effect nodes if copied wholesale (confirmed the hard way on the first attempt at
-		// this). Run this last, after AI has settled the clone into its own idle pose, or the animation
-		// graph's next tick (while AI is still briefly on) would immediately overwrite it.
-		if (!spawnPose.empty()) {
-			VisitNodes(cloneRoot, [&](RE::NiAVObject* a_node) {
-				const auto* name = a_node->name.c_str();
-				if (!name || !*name) {
-					return;
-				}
-				const auto it = spawnPose.find(name);
-				if (it == spawnPose.end()) {
-					return;
-				}
-				const std::string_view nameView{ name };
-				if (nameView.find("Root") != std::string_view::npos || nameView.find("COM") != std::string_view::npos) {
-					a_node->local.rotate = it->second.rotate;
-					a_node->local.scale = it->second.scale;
-				} else {
-					a_node->local = it->second;
-				}
-			});
-			RE::NiUpdateData updateData{};
-			cloneRoot->Update(updateData);
-		}
+		// comment for why a live query here isn't reliable in VR) onto the clone's skeleton. Run this
+		// last, after AI has settled the clone into its own idle pose, or the animation graph's next
+		// tick (while AI is still briefly on) would immediately overwrite it.
+		ApplyBonePose(cloneActor, spawnPose);
 
 		// Now that the clone's 3D exists, replay the player's active-effect visuals and the
 		// readied-spell charge art onto it.

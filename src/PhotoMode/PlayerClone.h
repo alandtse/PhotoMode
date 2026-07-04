@@ -21,6 +21,14 @@ namespace PhotoMode
 		// reliable in VR.
 		[[nodiscard]] static BonePose CapturePose(RE::Actor* a_actor);
 
+		// Mirrors a captured pose back onto an actor's skeleton by node name: every bone's local
+		// (parent-relative) rotation is authored assuming its parent chain leads up through
+		// "NPC Root [Root]"/"NPC COM [COM ]" at the captured orientation, so those two get their
+		// rotation/scale applied too -- but their translation is left alone, since overwriting it fights
+		// the actor's actor-level position and mislocates effect nodes (confirmed the hard way on the
+		// first attempt at this).
+		static void ApplyBonePose(RE::Actor* a_actor, const BonePose& a_pose);
+
 		// a_originalPos/a_originalAngleZ/a_originalPose: the player's position/facing/skeleton captured
 		// before anything (the VR free camera's play-space-flying hack in particular) had a chance to
 		// move it -- see the call site for why a live query at spawn time isn't reliable in VR.
