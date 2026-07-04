@@ -392,6 +392,12 @@ namespace PhotoMode
 			cloneActor->SetPosition(spawnPos + RE::NiPoint3{ 0.0f, 0.0f, kSpawnDropClearance }, true);
 			if (charController) {
 				charController->flags.reset(RE::CHARACTER_FLAGS::kNoSim);
+				// kSupport doesn't get cleared by SetPosition -- it's confirmed (via logging) to read
+				// stale-true on the very next frame, carrying over ground-contact state from before this
+				// teleport rather than reflecting the new (now airborne) position. Left alone, the wait
+				// below exits immediately, capturing the settle anchor 60 units too high. Force it false so
+				// the controller has to freshly re-earn it once it actually lands.
+				charController->flags.reset(RE::CHARACTER_FLAGS::kSupport);
 			}
 			positionPinned = true;
 			return;  // give the drop at least one real frame before checking on it
@@ -491,13 +497,10 @@ namespace PhotoMode
 		}
 		previousAIEnabled = aiEnabled;
 
-		// DEBUG: actual reseat disabled for now -- log what it WOULD have done instead, so we can see how
-		// the clone settles/moves on its own without this fighting it (suspected culprit for the
-		// "keeps getting teleported a few feet too high" loop: the anchor itself may be captured wrong).
 		if (posDrift > kPositionDriftTolerance || angleDrift > kAngleDriftToleranceDeg) {
-			logger::info("PlayerClone: WOULD reseat after drift (pos={:.1f} angle={:.1f}deg) -- reseat disabled for debugging"sv, posDrift, angleDrift);
-			// cloneActor->SetPosition(anchorPos, true);
-			// cloneActor->SetAngle({ 0.0f, 0.0f, anchorAngleZ });
+			logger::info("PlayerClone: reseating after drift (pos={:.1f} angle={:.1f}deg)"sv, posDrift, angleDrift);
+			cloneActor->SetPosition(anchorPos, true);
+			cloneActor->SetAngle({ 0.0f, 0.0f, anchorAngleZ });
 		}
 	}
 
