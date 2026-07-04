@@ -349,12 +349,10 @@ namespace PhotoMode
 				position.position = node->local.translate;
 				position.playSpaceRotation = node->local.rotate;
 			}
-			if (savePlayerTransform && player) {
-				position.playerPos = player->GetPosition();
-				position.playerRot = player->GetAngle();
-				const auto cell = player->GetParentCell();
-				position.cell.SetNumericID(cell ? cell->GetFormID() : 0);
-			}
+			// Player transform restore is intentionally unsupported in VR ApplyToCamera() (restoring the
+			// play-space node alone already defines the view; also repositioning the player would compound
+			// with it), so don't bother capturing playerPos/playerRot/cell here -- savePlayerTransform still
+			// applies to the flat-screen path below.
 			return position;
 		}
 

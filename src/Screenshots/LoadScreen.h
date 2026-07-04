@@ -27,7 +27,10 @@ namespace LoadScreen
 		std::optional<Transform> GetModelTransform() const;
 		const char*              GetCameraShotPath(const char* a_path) const;
 
-		void ApplyScreenshotTexture(RE::BSGeometry* a_canvas) const;
+		// Returns whether the texture was actually applied, so NotifyModelReady only marks the load
+		// screen "done" on a real apply -- not on any of the early-return paths (missing shader
+		// property/material), which would otherwise permanently block the VR retry on a later frame.
+		bool ApplyScreenshotTexture(RE::BSGeometry* a_canvas) const;
 
 		// VR streams the load-screen model in asynchronously, after InitLoadScreen3D's first setup call;
 		// the AdvanceMovie hook calls this each frame with the model NIF root once it appears, so the

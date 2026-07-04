@@ -37,8 +37,10 @@ repos:
         args: [--style=file]
         files: \.(h|hpp|c|cpp)$
 
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v4.0.0-alpha.8
+  # pre-commit/mirrors-prettier is archived (last stable tag v3.1.0, anything newer is an
+  # alpha pre-release of an archived repo); rbubley/mirrors-prettier is the maintained fork.
+  - repo: https://github.com/rbubley/mirrors-prettier
+    rev: v3.3.3
     hooks:
       - id: prettier
         additional_dependencies: ["prettier@3.1.0"]

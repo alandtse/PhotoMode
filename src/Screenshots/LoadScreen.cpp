@@ -85,9 +85,12 @@ namespace LoadScreen
 				current.obj = fullscreenModel;
 				current.texturePath = GetScreenshotTexture();
 
-				// skip if empty
+				// skip if empty -- current.type must fall back to kNone alongside obj, or downstream
+				// checks that switch on type alone (e.g. GetCameraShotPath's kFullScreen check) keep
+				// treating this as a PhotoMode load screen with no model to back it.
 				if (current.texturePath.empty()) {
 					current.obj = nullptr;
+					current.type = Type::kNone;
 				}
 			}
 			break;
@@ -96,9 +99,10 @@ namespace LoadScreen
 				current.obj = paintingModels[RNG().generate<std::size_t>(0, paintingModels.size() - 1)];  // Load random painting mesh
 				current.texturePath = GetScreenshotTexture();
 
-				// skip if empty
+				// skip if empty -- see the kFullScreen case above for why type must reset too.
 				if (current.texturePath.empty()) {
 					current.obj = nullptr;
+					current.type = Type::kNone;
 				}
 			}
 			break;
@@ -151,15 +155,15 @@ namespace LoadScreen
 		return current.type == Type::kFullScreen ? nullptr : a_path;
 	}
 
-	void Manager::ApplyScreenshotTexture(RE::BSGeometry* a_canvas) const
+	bool Manager::ApplyScreenshotTexture(RE::BSGeometry* a_canvas) const
 	{
 		if (!a_canvas) {
-			return;
+			return false;
 		}
 
 		const auto effect = a_canvas->GetGeometryRuntimeData().shaderProperty;
 		if (!effect) {
-			return;
+			return false;
 		}
 
 		const auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect.get());
@@ -173,7 +177,7 @@ namespace LoadScreen
 		}
 
 		if (!lightingShader || !material) {
-			return;
+			return false;
 		}
 
 		if (const auto newMaterial = RE::BSLightingShaderMaterial::CreateMaterial(RE::BSShaderMaterial::Feature::kDefault)) {
@@ -205,7 +209,10 @@ namespace LoadScreen
 
 			newMaterial->~BSLightingShaderMaterialBase();
 			RE::free(newMaterial);
+			return true;
 		}
+
+		return false;
 	}
 
 	void Manager::NotifyModelReady(RE::NiNode* a_model)
@@ -214,7 +221,9 @@ namespace LoadScreen
 			return;
 		}
 		if (const auto canvas = a_model->GetObjectByName("Canvas:0")) {
-			ApplyScreenshotTexture(canvas->AsGeometry());
+			if (!ApplyScreenshotTexture(canvas->AsGeometry())) {
+				return;  // geometry/shader not fully set up yet -- try again on a later ready frame
+			}
 			current.applied = true;
 
 			if (current.type == Type::kPainting && REL::Module::IsVR()) {

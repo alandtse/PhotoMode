@@ -37,6 +37,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          persist-credentials: false
 
       # The runner ships vcpkg but exposes it as VCPKG_INSTALLATION_ROOT; the preset's
       # toolchain reads VCPKG_ROOT, so bridge them.
@@ -84,6 +85,8 @@ jobs:
       nexus_version: ${{ steps.v.outputs.nexus_version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - id: v
         run: |
           set -euo pipefail
@@ -114,6 +117,8 @@ jobs:
       contents: write # create the release and attach the archive
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Download binaries
         uses: actions/download-artifact@v4
@@ -123,9 +128,11 @@ jobs:
 
       - name: Assemble mod archive
         id: pkg
+        env:
+          VER: ${{ needs.verify.outputs.nexus_version }}
         run: |
           set -euo pipefail
-          ver="${{ needs.verify.outputs.nexus_version }}"
+          ver="$VER"
           # Hyphenated archive name (no spaces) for safe handling downstream; the Nexus
           # display name is set separately via mod_filename.
           stage="PhotoMode-VR-${ver}"

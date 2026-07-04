@@ -578,10 +578,17 @@ namespace PhotoMode
 
 	void Manager::SetTimeFrozen(bool a_frozen)
 	{
-		// freezeTime halts the main update loop. In VR the panel and the free-fly camera are driven
-		// from the always-firing StopTimer render hook (which reads the controllers raw), so they
-		// keep running while frozen; the caller defers enabling this until the clone has streamed in,
-		// since the freeze would otherwise stall its 3D load.
+		// freezeTime halts the main update loop, which the clone's multi-frame spawn/settle sequence
+		// depends on actually running (3D streaming, settle-wait) -- the initial spawn path defers
+		// freezing until the clone has streamed in, but the interactive freeze shortcut has no such
+		// guard: pressing it again while a just-spawned clone is still mid-settle (not yet IsReady())
+		// would refreeze before that finishes, stalling it. Refuse to (re-)freeze in that window; the
+		// clone is expected to finish settling in well under a frame's worth of user reaction time.
+		if (REL::Module::IsVR() && a_frozen && g_photoClone.IsSpawned() && !g_photoClone.IsReady()) {
+			return;
+		}
+		// In VR the panel and the free-fly camera are driven from the always-firing StopTimer render
+		// hook (which reads the controllers raw), so they keep running while frozen.
 		MAIN_DATA(RE::Main::GetSingleton()).freezeTime = a_frozen;
 	}
 
