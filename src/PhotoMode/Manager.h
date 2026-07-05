@@ -30,6 +30,12 @@ namespace PhotoMode
 		void               Revert(bool a_deactivate = false);
 		void               QuitOnEscape();
 
+		// Freeze the world for a still shot via Main::freezeTime. That flag also halts the main update
+		// loop, so in VR the panel and free-cam are driven from the always-firing StopTimer hook to
+		// survive it, and the freeze is deferred until the photo clone has streamed in.
+		[[nodiscard]] bool IsTimeFrozen() const;
+		void               SetTimeFrozen(bool a_frozen);
+
 		bool GetResetAll() const;
 		void DoResetAll();
 
@@ -39,6 +45,23 @@ namespace PhotoMode
 		void NavigateTab(bool a_left);
 		void UpdateKeyboardFocus();
 
+		// The Character tab's photographed subject: the player on flat screen, the spawned clone in VR
+		// (the player there is the hidden camera rig). Ensures the subject's characterTab entry exists
+		// and returns it. Single source of truth for Activate and the per-frame Draw selection.
+		RE::Actor* EnsureDefaultCharacter();
+
+		// The VR clone's AI is frozen once posed (see PlayerClone::ApplyPose) so it can't wander off or
+		// talk on its own, but that also stops PlayIdle from visibly animating -- no-op for any actor
+		// that isn't the clone, so flat PhotoMode's posing of the player is unaffected.
+		void SetCloneAIEnabled(RE::Actor* a_actor, bool a_enable);
+		// Call every frame while the Expressions tab is open (after SetCloneAIEnabled(true)): AI being on
+		// drives the whole animation graph, not just explicit idle picks, so the clone's ambient/default
+		// animation can drift the body even without anyone touching the idle combo box. Poses tab wants
+		// that (the idle playing IS the point); Expressions doesn't -- it should only move the face.
+		// Continuously re-pins the body to the spawn pose while this tab is active. No-op for any actor
+		// that isn't the clone.
+		void HoldCloneBodyPose(RE::Actor* a_actor);
+
 		[[nodiscard]] float GetViewRoll(float a_fallback) const;
 		[[nodiscard]] float GetViewRoll() const;
 		void                SetViewRoll(float a_value);
@@ -46,11 +69,18 @@ namespace PhotoMode
 		void TryOpenFromTweenMenu();
 
 		void Draw();
+		// VR-only: draw the in-scene composition aids (grid + the selected overlay frame) into the
+		// helper's HMD-anchored HUD plane (the panel is a floating quad, so these can't frame the shot
+		// when drawn on it). No-op on flat screen.
+		void DrawVRHud();
 		void DrawOverlays();
 		bool OnFrameUpdate();
 		bool HasOverlay() const;
 
-		void                              OnDataLoad();
+		void OnDataLoad();
+		// Reset state invalidated by a save load / new game: the VR clone's runtime base (the form
+		// DB is rebuilt) and the captured play-space snapshot (the rig is re-established).
+		void                              OnGameLoad();
 		std::pair<ImGui::Texture*, float> GetOverlay() const;
 
 		bool IsCursorHoveringOverWindow() const;
@@ -85,6 +115,7 @@ namespace PhotoMode
 		static constexpr std::array tabResetNotifs = { "$PM_ResetNotifCamera", "$PM_ResetNotifTime", "$PM_ResetNotifPlayer", "$PM_ResetNotifFilters", "$PM_ResetNotifOverlays" };
 
 		static void        TogglePlayerControls(bool a_enable);
+		static void        HideVRFirstPersonBody(bool a_hide);  // declutter the free-cam view in VR
 		void               DrawControls();
 		void               DrawBar() const;
 		[[nodiscard]] bool SetupJournalMenu() const;

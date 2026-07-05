@@ -1,6 +1,7 @@
 #include "Console.h"
 #include "Hooks.h"
 #include "ImGui/Renderer.h"
+#include "ImGui/VRHelper.h"
 #include "Input.h"
 #include "Papyrus.h"
 #include "PhotoMode/Manager.h"
@@ -17,6 +18,11 @@ void OnInit(SKSE::MessagingInterface::Message* a_msg)
 			logger::info("{:*^30}", "POST LOAD");
 
 			Hooks::Install();
+		}
+		break;
+	case SKSE::MessagingInterface::kPostPostLoad:
+		{
+			ImGui::Renderer::VR::Connect();
 		}
 		break;
 	case SKSE::MessagingInterface::kInputLoaded:
@@ -40,12 +46,21 @@ void OnInit(SKSE::MessagingInterface::Message* a_msg)
 			Console::Install();
 		}
 		break;
+	case SKSE::MessagingInterface::kPostLoadGame:
+	case SKSE::MessagingInterface::kNewGame:
+		{
+			// Form DB rebuilt / rig re-established: drop state that would otherwise dangle or restore
+			// stale coordinates (VR clone base, play-space snapshot).
+			MANAGER(PhotoMode)->OnGameLoad();
+		}
+		break;
 	default:
 		break;
 	}
 }
 
-#ifdef SKYRIM_AE
+// Single cross-runtime CommonLibSSE-NG plugin: advertise all supported runtimes and
+// gate the version at query time (VR is 1.4.x).
 extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []() {
 	SKSE::PluginVersionData v;
 	v.PluginVersion(Version::MAJOR);
@@ -53,11 +68,11 @@ extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []() {
 	v.AuthorName("powerofthree");
 	v.UsesAddressLibrary();
 	v.UsesUpdatedStructs();
-	v.CompatibleVersions({ SKSE::RUNTIME_SSE_LATEST });
+	v.CompatibleVersions({ SKSE::RUNTIME_SSE_1_5_97, SKSE::RUNTIME_SSE_LATEST, SKSE::RUNTIME_VR_1_4_15 });
 
 	return v;
 }();
-#else
+
 extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a_skse, SKSE::PluginInfo* a_info)
 {
 	a_info->infoVersion = SKSE::PluginInfo::kVersion;
@@ -70,14 +85,18 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 	}
 
 	const auto ver = a_skse->RuntimeVersion();
-	if (ver < SKSE::RUNTIME_SSE_1_5_39) {
+	if (ver.major() == 1 && ver.minor() == 4) {  // VR
+		if (ver < SKSE::RUNTIME_VR_1_4_15) {
+			logger::critical(FMT_STRING("Unsupported VR runtime version {}"), ver.string());
+			return false;
+		}
+	} else if (ver < SKSE::RUNTIME_SSE_1_5_39) {
 		logger::critical(FMT_STRING("Unsupported runtime version {}"), ver.string());
 		return false;
 	}
 
 	return true;
 }
-#endif
 
 void InitializeLog()
 {
@@ -108,7 +127,11 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 
 	logger::info("Game version : {}", a_skse->RuntimeVersion().string());
 
-	SKSE::AllocTrampoline(128);
+	// Shared by every InstallHooks() in Hooks.cpp -- allocated exactly once, here. A second
+	// AllocTrampoline call anywhere else would free this buffer (SKSE::Trampoline::set_trampoline calls
+	// release() first) out from under whatever hooks had already been written into it. Sized generously
+	// for the 4 write_thunk_call stubs plus VRTFCFix's custom Xbyak patch that all share it (VR only).
+	SKSE::AllocTrampoline(256);
 
 	Settings::GetSingleton()->Load(FileType::kDisplayTweaks, [](auto& ini) {
 		ImGui::Renderer::LoadSettings(ini);  // display tweaks scaling

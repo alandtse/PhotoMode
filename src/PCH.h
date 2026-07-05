@@ -139,13 +139,39 @@ namespace stl
 
 		T::func = reinterpret_cast<std::uintptr_t>(alloc);
 	}
+
+	inline bool IsVR()
+	{
+		return REL::Module::IsVR();
+	}
+
+	// ImageSpaceManager runtime data: NG splits it into SE/AE vs VR structs and its non-VR
+	// GetRuntimeData() carries no VR offset, so each access must pick the runtime-correct one.
+	[[nodiscard]] inline RE::ImageSpaceBaseData*& imagespace_current(RE::ImageSpaceManager* a_mgr)
+	{
+		return REL::Module::IsVR() ? a_mgr->GetVRRuntimeData().currentBaseData : a_mgr->GetRuntimeData().currentBaseData;
+	}
+	[[nodiscard]] inline RE::ImageSpaceBaseData*& imagespace_override(RE::ImageSpaceManager* a_mgr)
+	{
+		return REL::Module::IsVR() ? a_mgr->GetVRRuntimeData().overrideBaseData : a_mgr->GetRuntimeData().overrideBaseData;
+	}
 }
 
-#ifdef SKYRIM_AE
-#	define OFFSET(se, ae) ae
-#else
-#	define OFFSET(se, ae) se
-#endif
+// Single cross-runtime CommonLibSSE-NG DLL: offsets and engine fields resolve at load time.
+// OFFSET_3 supplies a distinct VR byte offset; OFFSET defaults VR to the SE value.
+#define OFFSET(se, ae) REL::VariantOffset(se, ae, se)
+#define OFFSET_3(se, ae, vr) REL::VariantOffset(se, ae, vr)
+
+// Engine fields that NG keeps in RUNTIME_DATA blocks are reached through its
+// runtime-detecting accessors. These aliases name the accessor for each struct.
+#define RENDERER_DATA(a_obj) (a_obj)->GetRuntimeData()
+#define MAIN_DATA(a_obj) (a_obj)->GetRuntimeData()
+#define ACTOR_DATA(a_obj) (a_obj)->GetActorRuntimeData()
+#define CAMERA_DATA(a_obj) (a_obj)->GetRuntimeData2()  // worldFOV etc.
+#define MISTMENU_DATA(a_obj) (a_obj)->GetRuntimeData()
+#define PLAYER_GAMESTATE(a_obj) (a_obj)->GetGameStatsData()  // byCharGenFlag etc.
+#define CONTROLMAP_DATA(a_obj) (a_obj)->GetRuntimeData()
+#define JOURNALMENU_DATA(a_obj) (a_obj)->GetRuntimeData()
 
 #include "Cache.h"
 #include "Translation.h"

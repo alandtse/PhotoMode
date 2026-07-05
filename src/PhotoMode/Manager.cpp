@@ -3,13 +3,156 @@
 #include "Hotkeys.h"
 #include "ImGui/IconsFonts.h"
 #include "ImGui/Styles.h"
+#include "ImGui/VRHelper.h"
 #include "ImGui/Widgets.h"
+#include "PlayerClone.h"
 #include "Screenshots/Manager.h"
 
 #include "Input.h"
 
 namespace PhotoMode
 {
+	namespace
+	{
+		PlayerClone g_photoClone;  // VR-only photographable stand-in for the player
+
+		// Pristine PlayerWorldNode transform captured at activation, restored on exit so the camera
+		// rig returns exactly to the player (the play-space drive offsets it during the session).
+		RE::NiPoint3  g_vrPlaySpaceOrigin{};
+		RE::NiMatrix3 g_vrPlaySpaceOriginRotate{};
+		bool          g_vrPlaySpaceCaptured = false;
+
+		// The player's real position/facing at activation, before DriveVRCamera's play-space-flying
+		// hack has moved anything -- fed to PlayerClone::Spawn() instead of a live GetPosition() query.
+		// VR's own room-scale tracking normally turns real physical HMD movement into actual player
+		// position updates, and can't tell our artificial PlayerWorldNode offset apart from a genuine
+		// physical step, so by the time Spawn() runs (especially after flying the camera around while
+		// frozen) a live query may already reflect wherever the camera flew to.
+		RE::NiPoint3          g_originalPlayerPos{};
+		float                 g_originalPlayerAngleZ = 0.0f;
+		PlayerClone::BonePose g_originalPlayerPose{};  // same reasoning, but the skeleton itself
+
+		// Close any open game menu that pauses the game so the VR free camera can run.
+		// The helper's in-scene overlay isn't a game menu, so it stays composited.
+		void CloseBlockingMenus()
+		{
+			const auto ui = RE::UI::GetSingleton();
+			const auto msgQueue = RE::UIMessageQueue::GetSingleton();
+			if (!ui || !msgQueue) {
+				return;
+			}
+			for (const auto& [name, entry] : ui->menuMap) {
+				if (entry.menu && entry.menu->PausesGame()) {
+					msgQueue->AddMessage(name, RE::UI_MESSAGE_TYPE::kHide, nullptr);
+				}
+			}
+		}
+
+		// VR keeps the camera locked to its HMD-driven kVR state (the flat FreeCameraState never
+		// installs — an engine bug), so a "free camera" moves the play space: translating/rotating
+		// PlayerWorldNode flies the whole HMD rig through the world. Facing comes from the live camera
+		// rotation (the game's HMD node is frozen by freezeTime). Left stick = horizontal along that
+		// facing; right stick X = yaw the view (compose shots); right stick Y = altitude. Sticks read
+		// raw — the helper suppresses controller events while focused.
+		void DriveVRCamera()
+		{
+			const auto inputMgr = RE::BSInputDeviceManager::GetSingleton();
+			const auto player = RE::PlayerCharacter::GetSingleton();
+			const auto vrNodes = player ? player->GetVRNodeData() : nullptr;
+			const auto worldNode = vrNodes ? vrNodes->PlayerWorldNode : nullptr;
+			if (!worldNode || !inputMgr) {
+				return;
+			}
+
+			// Left stick = movement, right stick = aim (rotate / altitude).
+			const auto moveCtrl = static_cast<RE::BSOpenVRControllerDevice*>(inputMgr->GetVRControllerLeft());
+			const auto aimCtrl = static_cast<RE::BSOpenVRControllerDevice*>(inputMgr->GetVRControllerRight());
+			if (!moveCtrl || !aimCtrl) {
+				return;
+			}
+			// Deadzone each axis independently: a single active axis must not let sub-deadzone rest
+			// noise on the others bleed into slow drift.
+			constexpr float dz = 0.15f;
+			const auto      deadzone = [](float v) { return std::abs(v) <= dz ? 0.0f : v; };
+			const auto      moveStick = moveCtrl->GetThumbstick();
+			const auto      aimStick = aimCtrl->GetThumbstick();
+			const float     lx = deadzone(moveStick.x);
+			const float     ly = deadzone(moveStick.y);
+			const float     rx = deadzone(aimStick.x);
+			const float     ry = deadzone(aimStick.y);
+			if (lx == 0.0f && ly == 0.0f && rx == 0.0f && ry == 0.0f) {
+				return;
+			}
+
+			// Live HMD facing from the actual VR render camera, updated every frame for rendering (the
+			// game's HMD node is frozen by freezeTime). WorldRootCamera() is robust across cell types --
+			// the world-root's first child is only the camera in open worldspaces, not towns/interiors.
+			RE::NiPoint3 forward{ 0.0f, 1.0f, 0.0f };
+			RE::NiPoint3 right{ 1.0f, 0.0f, 0.0f };
+			const auto   renderCam = RE::Main::WorldRootCamera();
+			if (renderCam) {
+				const auto& m = renderCam->world.rotate;
+				// WorldRootCamera is an NiCamera in a view basis: col0 look, col1 up, col2 right
+				// (verified in-headset). Use col0 as the gaze; col1 is up (tilts with pitch), col2 right.
+				forward = { m.entry[0][0], m.entry[1][0], m.entry[2][0] };
+			}
+			const auto flatten = [](RE::NiPoint3& v) {
+				const float len = std::sqrt(v.x * v.x + v.y * v.y);
+				v.z = 0.0f;
+				if (len > 1e-4f) {
+					v.x /= len;
+					v.y /= len;
+				}
+			};
+			flatten(forward);
+			// Derive strafe from the flattened look so it is always 90 degrees to the right in the
+			// horizontal plane. Reading the camera's own X column instead drifts with HMD pitch/roll,
+			// so left/right flips with orientation while forward/back stays correct.
+			right = { forward.y, -forward.x, 0.0f };
+
+			const float  dt = RE::BSTimer::GetSingleton()->realTimeDelta;
+			const float  speed = FreeCamera::translateSpeed * 100.0f;
+			RE::NiPoint3 delta = forward * (ly * speed * dt) + right * (lx * speed * dt);
+			delta.z += ry * speed * dt;  // right stick Y = altitude
+			worldNode->local.translate += delta;
+
+			// right stick X = yaw the rig about the HMD so the view rotates in place. The rig
+			// translate and the pivot are both in world-aligned space (PlayerWorldNode's parent is
+			// the scene root at the origin), so orbiting local.translate around the camera world
+			// position keeps the HMD fixed while turning -- not a sweep about the world origin.
+			if (std::abs(rx) > dz) {
+				RE::NiMatrix3 yaw;
+				yaw.MakeRotation(rx * 1.5f * dt, RE::NiPoint3{ 0.0f, 0.0f, 1.0f });
+				const RE::NiPoint3 pivot = renderCam ? renderCam->world.translate : worldNode->local.translate;
+				worldNode->local.translate = pivot + yaw * (worldNode->local.translate - pivot);
+				worldNode->local.rotate = yaw * worldNode->local.rotate;
+			}
+
+			RE::NiUpdateData updateData{};
+			worldNode->Update(updateData);
+		}
+
+		// Restore the play space to where it was at activation, so exiting doesn't leave the HMD
+		// desynced from the player position.
+		void ResetVRPlaySpace()
+		{
+			if (!g_vrPlaySpaceCaptured) {
+				return;
+			}
+			const auto player = RE::PlayerCharacter::GetSingleton();
+			const auto vrNodes = player ? player->GetVRNodeData() : nullptr;
+			if (const auto worldNode = vrNodes ? vrNodes->PlayerWorldNode : nullptr) {
+				// Unify the play space back onto the player: undo the fly offset (translate) and the
+				// compose yaw (rotate) accumulated during the session.
+				worldNode->local.translate = g_vrPlaySpaceOrigin;
+				worldNode->local.rotate = g_vrPlaySpaceOriginRotate;
+				RE::NiUpdateData updateData{};
+				worldNode->Update(updateData);
+			}
+			g_vrPlaySpaceCaptured = false;
+		}
+	}
+
 	void Manager::Register()
 	{
 		tweenMenuInstalled = GetModuleHandle(L"TweenMenuOverhaul") != nullptr;
@@ -62,7 +205,7 @@ namespace PhotoMode
 			return false;
 		}
 
-		switch (controlMap->contextPriorityStack.back()) {
+		switch (CONTROLMAP_DATA(controlMap).contextPriorityStack.back()) {
 		case RE::UserEvents::INPUT_CONTEXT_ID::kGameplay:
 		case RE::UserEvents::INPUT_CONTEXT_ID::kTFCMode:
 		case RE::UserEvents::INPUT_CONTEXT_ID::kConsole:
@@ -101,6 +244,54 @@ namespace PhotoMode
 		}
 	}
 
+	RE::Actor* Manager::EnsureDefaultCharacter()
+	{
+		// VR photographs the clone (the player is the hidden camera rig); flat photographs the player.
+		// Falls back to the player until the clone has spawned. Creates the subject's Character entry
+		// if missing (try_emplace won't clobber an existing one, so the do-nothing package isn't redone).
+		RE::Actor* subject = RE::PlayerCharacter::GetSingleton();
+		if (REL::Module::IsVR()) {
+			if (const auto clone = g_photoClone.GetClone()) {
+				subject = clone;
+			}
+		}
+		if (subject) {
+			characterTab.try_emplace(subject->GetFormID(), subject);
+		}
+		return subject;
+	}
+
+	void Manager::SetCloneAIEnabled(RE::Actor* a_actor, bool a_enable)
+	{
+		if (a_actor && a_actor == g_photoClone.GetClone()) {
+			a_actor->EnableAI(a_enable);
+			if (a_enable) {
+				// Character's constructor already calls this once when the clone's tab entry is first
+				// created, but EnableAI(false) then EnableAI(true) again (Poses/Expressions re-enabling
+				// AI) can leave that override lapsed, falling back to the clone's own borrowed Mannequin
+				// package underneath -- which can have its own location logic and walk the clone off to
+				// wherever it expects, since our pinned spot has nothing to do with that package's
+				// authored location. Re-issuing it every time AI comes back on keeps it pinned regardless.
+				a_actor->InitiateDoNothingPackage();
+			}
+			// Restoring the spawn pose on disable is handled in PlayerClone::ReseatIfDrifted instead of
+			// here -- this function is called twice per frame while a tab stays open (disabled by
+			// default at the top of Character::Draw, then re-enabled inside the active tab's block), so
+			// checking IsAIEnabled() here can't tell "genuinely leaving the tab" apart from "the same
+			// every-frame off-then-on dance while it stays open" (confirmed: it doesn't -- refought the
+			// idle continuously and it never got a chance to visibly play). ReseatIfDrifted is called
+			// once per frame from the VR update loop, after all of a frame's SetCloneAIEnabled calls have
+			// already settled, so its own cross-frame edge tracking sees the real transition correctly.
+		}
+	}
+
+	void Manager::HoldCloneBodyPose(RE::Actor* a_actor)
+	{
+		if (a_actor && a_actor == g_photoClone.GetClone()) {
+			g_photoClone.RestoreSpawnPose();
+		}
+	}
+
 	void Manager::Activate()
 	{
 		RE::PlaySound("UIMenuOK");
@@ -109,8 +300,7 @@ namespace PhotoMode
 		timeTab.GetOriginalState();
 
 		const auto player = RE::PlayerCharacter::GetSingleton();
-		characterTab.emplace(player->GetFormID(), Character(player));
-		cachedCharacter = player;
+		cachedCharacter = EnsureDefaultCharacter();  // player here; the VR clone isn't spawned until below
 
 		filterTab.GetOriginalState();
 
@@ -118,26 +308,71 @@ namespace PhotoMode
 		originalcameraState = pcCamera->currentState ? pcCamera->currentState->id : RE::CameraState::kThirdPerson;
 
 		menusAlreadyHidden = !RE::UI::GetSingleton()->IsShowingMenus();
-		if (menusAlreadyHidden) {
-			hiddenUI = true;
-		}
+		// Flat: inherit the HUD-hidden state (opened with menus off -> keep the panel off). VR: the
+		// helper overlay isn't a game menu, so IsShowingMenus is normally false — that must not hide
+		// the photo panel.
+		hiddenUI = menusAlreadyHidden && !REL::Module::IsVR();
 
 		// disable saving
-		RE::PlayerCharacter::GetSingleton()->byCharGenFlag.set(RE::PlayerCharacter::ByCharGenFlag::kDisableSaving);
+		PLAYER_GAMESTATE(RE::PlayerCharacter::GetSingleton()).byCharGenFlag.set(RE::PlayerCharacter::ByCharGenFlag::kDisableSaving);
 
-		// toggle freecam
-		if (originalcameraState != RE::CameraState::kFree) {
+		// Flat screen uses the engine free camera. VR can't: its ToggleFreeCameraMode never installs
+		// the state (engine bug) and the camera stays HMD-locked (kVR), so VR leaves the camera
+		// state untouched and flies the play space instead (see DriveVRCamera).
+		if (!REL::Module::IsVR() && originalcameraState != RE::CameraState::kFree) {
 			pcCamera->ToggleFreeCameraMode(false);
-			//RE::ControlMap::GetSingleton()->PushInputContext(RE::ControlMap::InputContextID::kTFCMode);
+			// clear the plane lock so forward follows the aim pitch instead of staying plane-locked
+			if (const auto freeState = skyrim_cast<RE::FreeCameraState*>(pcCamera->currentState.get())) {
+				freeState->lockToZPlane = false;
+			}
 		}
 
 		// disable controls
 		TogglePlayerControls(false);
 
+		// Hide the VR first-person arms/hands so they don't ride the free camera, and place a clone at
+		// the player's spot as the photo subject. The clone is a faithful flat-screen analogue: a
+		// standalone actor that can be posed (idles) and emote (expressions/phonemes) — which the real
+		// player can't once the world is frozen. Spawn before time is frozen so the clone's 3D streams.
+		HideVRFirstPersonBody(true);
+		if (REL::Module::IsVR()) {
+			// Snapshot the rig's resting transform so exit can unify the play space back onto the
+			// player. Flying mutates PlayerWorldNode->local; restoring this on exit removes the offset.
+			if (const auto vrNodes = player ? player->GetVRNodeData() : nullptr) {
+				if (const auto worldNode = vrNodes->PlayerWorldNode) {
+					g_vrPlaySpaceOrigin = worldNode->local.translate;
+					g_vrPlaySpaceOriginRotate = worldNode->local.rotate;
+					g_vrPlaySpaceCaptured = true;
+				}
+			}
+			// Also snapshot the player's actual position/facing/skeleton now, before any flying has
+			// happened -- see g_originalPlayerPos.
+			if (player) {
+				g_originalPlayerPos = player->GetPosition();
+				g_originalPlayerAngleZ = player->GetAngleZ();
+				g_originalPlayerPose = PlayerClone::CapturePose(player);
+			}
+			// Starting frozen keeps the real (frozen) body in place as the subject — don't spawn the
+			// clone yet, since it would stream in half-rendered as a ghost while time is stopped. It's
+			// spawned on the first unfreeze (OnFrameUpdate), when the user wants the editable stand-in.
+			if (!freezeTimeOnStart) {
+				g_photoClone.Spawn(g_originalPlayerPos, g_originalPlayerAngleZ, g_originalPlayerPose);
+			}
+			CloseBlockingMenus();                 // drop the pause so the free camera runs
+			ImGui::Renderer::VR::RequestFocus();  // own the interactive panel for this session
+			ImGui::Renderer::VR::ArmShortcuts();  // drop stale combo edges from before activation
+			ImGui::Renderer::VR::StartHud();      // grid + overlay on their own HMD-anchored HUD plane
+			// The subject is the clone once it exists, else the (frozen) player (see EnsureDefaultCharacter).
+			cachedCharacter = EnsureDefaultCharacter();
+		}
+
 		// apply mcm settings
 		FreeCamera::translateSpeed = freeCameraSpeed;
+		// Freeze immediately on both runtimes (action-shot use case). VR can freeze right away now that
+		// it doesn't spawn the clone while frozen — the frozen real body is the subject until the user
+		// unfreezes, at which point the clone streams in cleanly.
 		if (freezeTimeOnStart) {
-			RE::Main::GetSingleton()->freezeTime = true;
+			SetTimeFrozen(true);
 		}
 
 		// load default screenshot keys
@@ -166,9 +401,28 @@ namespace PhotoMode
 		}
 	}
 
+	void Manager::HideVRFirstPersonBody(bool a_hide)
+	{
+		// The VR free camera carries the first-person arms/hands with it, which clutters
+		// every shot. Cull the first-person 3D so the flown camera sees a clean scene.
+		// Re-applied each frame because the engine/VR body mods re-show it.
+		if (!REL::Module::IsVR()) {
+			return;
+		}
+		if (const auto player = RE::PlayerCharacter::GetSingleton()) {
+			if (const auto firstPerson3D = player->Get3D(true)) {
+				firstPerson3D->SetAppCulled(a_hide);
+			}
+		}
+	}
+
 	bool Manager::OnFrameUpdate()
 	{
-		if (!IsValid()) {
+		// Flat screen exits the session when a blocking menu or invalid control context appears.
+		// VR ignores this gate entirely: the helper owns enter/exit via focus, and the free camera
+		// runs an intentionally non-standard control context that IsValid() rejects — bailing here
+		// would skip all the per-frame VR work (clone pose/effects, deferred freeze, body hide).
+		if (!REL::Module::IsVR() && !IsValid()) {
 			Deactivate();
 			return false;
 		}
@@ -184,6 +438,62 @@ namespace PhotoMode
 			RE::ControlMap::GetSingleton()->AllowTextInput(false);
 		}
 		TogglePlayerControls(false);
+
+		// keep the VR first-person body hidden (the engine/body mods re-show it each frame)
+		HideVRFirstPersonBody(true);
+
+		// match the clone to the player's frozen entry pose once its 3D has streamed in (no-op
+		// after it applies once)
+		if (REL::Module::IsVR()) {
+			g_photoClone.ApplyPose();
+			g_photoClone.ReseatIfDrifted();
+
+			// Fly the play space (VR has no usable detached camera — see DriveVRCamera), but only while
+			// the wand isn't on the panel: when pointing at the menu the thumbstick should scroll it,
+			// not fly the camera.
+			if (!ImGui::Renderer::VR::IsPointerInPanel()) {
+				DriveVRCamera();
+			}
+
+			// Off-panel face buttons are PhotoMode shortcuts, registered with the helper as off-panel
+			// combos so it gates them to off the panel itself (on the panel the same buttons drive the
+			// UI) and lists them in its controller map. Read every frame to consume the edge; act when
+			// focused. Dominant hand: shutter / hide / freeze. Off hand: next tab / reset.
+			using VRS = ImGui::Renderer::VR::Shortcut;
+			const bool takePhoto = ImGui::Renderer::VR::Pressed(VRS::TakePhoto);
+			const bool toggleUI = ImGui::Renderer::VR::Pressed(VRS::HideUI);
+			const bool freezeTime = ImGui::Renderer::VR::Pressed(VRS::FreezeTime);
+			const bool nextTab = ImGui::Renderer::VR::Pressed(VRS::NextTab);
+			const bool prevTab = ImGui::Renderer::VR::Pressed(VRS::PrevTab);
+			const bool reset = ImGui::Renderer::VR::Pressed(VRS::Reset);
+			if (ImGui::Renderer::VR::HasFocus()) {
+				if (takePhoto) {
+					MANAGER(Input)->QueueScreenshot(true);
+				}
+				if (toggleUI) {
+					ToggleUI();
+				}
+				if (freezeTime) {
+					SetTimeFrozen(!IsTimeFrozen());
+					// First unfreeze brings in the editable clone — it streams cleanly now time runs,
+					// spawning at the player's spot to replace the frozen body the user was viewing.
+					// Position/facing/pose come from the activation-time snapshot (g_originalPlayerPos),
+					// not a live query, so there's no need to wait for anything to settle before spawning.
+					if (!IsTimeFrozen() && !g_photoClone.IsSpawned()) {
+						g_photoClone.Spawn(g_originalPlayerPos, g_originalPlayerAngleZ, g_originalPlayerPose);
+					}
+				}
+				if (nextTab) {
+					NavigateTab(false);
+				}
+				if (prevTab) {
+					NavigateTab(true);
+				}
+				if (reset) {
+					Revert(false);
+				}
+			}
+		}
 
 		timeTab.OnFrameUpdate();
 
@@ -204,9 +514,10 @@ namespace PhotoMode
 		cachedCharacter = nullptr;
 
 		// reset camera
-		if (originalcameraState != RE::CameraState::kFree) {
+		// Flat-only: VR never entered the engine free camera (it flies the play space), so toggling
+		// here would erroneously enter free-cam on exit.
+		if (!REL::Module::IsVR() && originalcameraState != RE::CameraState::kFree) {
 			RE::PlayerCamera::GetSingleton()->ToggleFreeCameraMode(false);
-			//RE::ControlMap::GetSingleton()->PopInputContext(RE::ControlMap::InputContextID::kTFCMode);
 		}
 
 		// reset controls
@@ -214,8 +525,18 @@ namespace PhotoMode
 		RE::ControlMap::GetSingleton()->AllowTextInput(false);
 		TogglePlayerControls(true);
 
+		// restore the VR first-person body, remove the photo clone, and hand the helper's
+		// overlay back so its picker is free again
+		HideVRFirstPersonBody(false);
+		g_photoClone.Despawn();
+		if (REL::Module::IsVR()) {
+			ResetVRPlaySpace();  // restore the play-space node; never touches data.location (no save risk)
+			ImGui::Renderer::VR::ReleaseFocus();
+			ImGui::Renderer::VR::StopHud();  // tear down the HUD plane so no stale grid/overlay lingers
+		}
+
 		// allow saving
-		RE::PlayerCharacter::GetSingleton()->byCharGenFlag.reset(RE::PlayerCharacter::ByCharGenFlag::kDisableSaving);
+		PLAYER_GAMESTATE(RE::PlayerCharacter::GetSingleton()).byCharGenFlag.reset(RE::PlayerCharacter::ByCharGenFlag::kDisableSaving);
 
 		// reset variables
 		hiddenUI = false;
@@ -248,6 +569,27 @@ namespace PhotoMode
 				Deactivate();
 			}
 		}
+	}
+
+	bool Manager::IsTimeFrozen() const
+	{
+		return MAIN_DATA(RE::Main::GetSingleton()).freezeTime;
+	}
+
+	void Manager::SetTimeFrozen(bool a_frozen)
+	{
+		// freezeTime halts the main update loop, which the clone's multi-frame spawn/settle sequence
+		// depends on actually running (3D streaming, settle-wait) -- the initial spawn path defers
+		// freezing until the clone has streamed in, but the interactive freeze shortcut has no such
+		// guard: pressing it again while a just-spawned clone is still mid-settle (not yet IsReady())
+		// would refreeze before that finishes, stalling it. Refuse to (re-)freeze in that window; the
+		// clone is expected to finish settling in well under a frame's worth of user reaction time.
+		if (REL::Module::IsVR() && a_frozen && g_photoClone.IsSpawned() && !g_photoClone.IsReady()) {
+			return;
+		}
+		// In VR the panel and the free-fly camera are driven from the always-firing StopTimer render
+		// hook (which reads the controllers raw), so they keep running while frozen.
+		MAIN_DATA(RE::Main::GetSingleton()).freezeTime = a_frozen;
 	}
 
 	void Manager::Revert(bool a_deactivate)
@@ -374,6 +716,21 @@ namespace PhotoMode
 		resetRootIdle = RE::TESForm::LookupByEditorID<RE::TESIdleForm>("ResetRoot");
 	}
 
+	void Manager::OnGameLoad()
+	{
+		// The form DB is rebuilt and the player rig re-established, so the cached clone base would
+		// dangle and the play-space snapshot would restore stale coordinates. Drop both.
+		g_photoClone.Invalidate();
+		g_vrPlaySpaceCaptured = false;
+
+		// Defensive: if a save happened mid-session while the clone's spawn had dropped player collision
+		// (see PlayerClone::Spawn/Despawn) and that actor flag is part of what the save captured, loading
+		// it back would otherwise leave the player permanently collision-free with no in-game recovery.
+		if (const auto player = RE::PlayerCharacter::GetSingleton()) {
+			player->SetCollision(true);
+		}
+	}
+
 	std::pair<ImGui::Texture*, float> Manager::GetOverlay() const
 	{
 		return overlaysTab.GetCurrentOverlay();
@@ -392,13 +749,56 @@ namespace PhotoMode
 		ImGui::Begin("##Main", nullptr, ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration);
 		{
 			if (!IsHidden()) {
-				overlaysTab.DrawOverlays();
-				CameraGrid::Draw();
+				// On flat screen the overlay frame and grid compose onto this fullscreen panel; in VR the
+				// panel is a floating quad, so both are drawn into the HMD-anchored HUD plane instead so
+				// they frame the actual shot (see DrawVRHud).
+				if (!REL::Module::IsVR()) {
+					overlaysTab.DrawOverlays();
+					CameraGrid::Draw();
+				}
 				DrawBar();
 				DrawControls();
+
+				// VR has no Escape key, so offer an on-panel way out of the session.
+				if (REL::Module::IsVR()) {
+					const auto pos = ImGui::GetNativeViewportPos();
+					const auto size = ImGui::GetNativeViewportSize();
+					ImGui::SetCursorScreenPos({ pos.x + size.x - 220.0f, pos.y + 40.0f });
+					if (ImGui::Button("Exit Photo Mode", { 190.0f, 48.0f })) {
+						ToggleActive();
+					}
+				}
 			}
 		}
 		ImGui::End();
+	}
+
+	void Manager::DrawVRHud()
+	{
+		if (!REL::Module::IsVR()) {
+			return;
+		}
+		// Draw the aids only when shown; the lambda still runs while hidden (drawing nothing) so the
+		// helper re-clears the HUD plane each frame and a disabled/hidden grid or overlay disappears.
+		const bool drawAids = IsActive() && !IsHidden();
+		ImGui::Renderer::VR::RenderHud([this, drawAids] {
+			if (!drawAids) {
+				return;
+			}
+			// Fill the HUD viewport with an inert window so the grid/overlay's GetWindowPos/Size span
+			// the whole plane; NoInputs/NoBackground keep it a pure overlay.
+			const auto* vp = ImGui::GetMainViewport();
+			ImGui::SetNextWindowPos(vp->Pos);
+			ImGui::SetNextWindowSize(vp->Size);
+			ImGui::Begin("##VRHud", nullptr,
+				ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+					ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus);
+			// The selected overlay frame is part of the composed shot, so preview it in-scene under the
+			// grid (the screenshot path bakes it into the PNG separately).
+			overlaysTab.DrawOverlays();
+			CameraGrid::Draw();
+			ImGui::End();
+		});
 	}
 
 	void Manager::DrawOverlays()
@@ -424,8 +824,16 @@ namespace PhotoMode
 
 		constexpr auto windowFlags = ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoDecoration;
 
-		ImGui::SetNextWindowPos(ImVec2(center.x + third_width, center.y + third_height * 0.8f), ImGuiCond_Always, ImVec2(0.5, 0.5));
-		ImGui::SetNextWindowSize(ImVec2(size.x / 3.25f, size.y / 3.125f));
+		// Flat keeps the menu compact and offset to a corner so the game stays visible behind it. VR
+		// renders onto its own large HMD panel with nothing behind it, so center the menu and use much
+		// more of that real estate (it otherwise looks tiny and cramped in a sea of empty panel).
+		if (REL::Module::IsVR()) {
+			ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+			ImGui::SetNextWindowSize(ImVec2(size.x / 1.7f, size.y / 1.4f));
+		} else {
+			ImGui::SetNextWindowPos(ImVec2(center.x + third_width, center.y + third_height * 0.8f), ImGuiCond_Always, ImVec2(0.5, 0.5));
+			ImGui::SetNextWindowSize(ImVec2(size.x / 3.25f, size.y / 3.125f));
+		}
 
 		bool navigateWithMouse = MANAGER(Input)->CanNavigateWithMouse();
 
@@ -526,7 +934,10 @@ namespace PhotoMode
 							const auto consoleRef = RE::Console::GetSelectedRef();
 							if (!consoleRef || !consoleRef->Is(RE::FormType::ActorCharacter) || consoleRef->IsDisabled() || consoleRef->IsDeleted() || !consoleRef->Is3DLoaded()) {
 								prevCachedCharacter = cachedCharacter;
-								cachedCharacter = RE::PlayerCharacter::GetSingleton();
+								// Edit the photographed subject (player on flat, clone in VR). Without this,
+								// transforms move the camera and expressions/poses/effects land on the
+								// hidden player instead of the visible clone.
+								cachedCharacter = EnsureDefaultCharacter();
 							} else {
 								prevCachedCharacter = cachedCharacter;
 								cachedCharacter = consoleRef->As<RE::Actor>();
@@ -584,6 +995,28 @@ namespace PhotoMode
 		const static auto offsetY = size.y / 25.0f;
 
 		ImGui::SetNextWindowPos(ImVec2(center.x, size.y - offsetY), ImGuiCond_Always, ImVec2(0.5, 0.5));
+
+		if (REL::Module::IsVR()) {
+			// VR controls legend: each action and the off-panel controller button that triggers it,
+			// drawn from the same table that registers the combos -- so the hint can't drift from the
+			// binding.
+			ImGui::Begin("##Bar", nullptr, ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize);
+			ImGui::ExtendWindowPastBorder();
+			bool first = true;
+			for (const auto& hint : ImGui::Renderer::VR::ShortcutHints()) {
+				if (!first) {
+					ImGui::SameLine();
+					ImGui::TextDisabled("|");
+					ImGui::SameLine();
+				}
+				first = false;
+				ImGui::TextDisabled("%s", hint.button.c_str());
+				ImGui::SameLine();
+				ImGui::TextUnformatted(hint.action);
+			}
+			ImGui::End();
+			return;
+		}
 
 		bool canNavigateWithMouse = MANAGER(Input)->CanNavigateWithMouse();
 
@@ -661,7 +1094,7 @@ namespace PhotoMode
 	bool Manager::SetupJournalMenu() const
 	{
 		const auto menu = RE::UI::GetSingleton()->GetMenu<RE::JournalMenu>(RE::JournalMenu::MENU_NAME);
-		const auto view = menu ? menu->systemTab.view : nullptr;
+		const auto view = menu ? JOURNALMENU_DATA(menu).systemTab.view : nullptr;
 
 		RE::GFxValue page;
 		if (!view || !view->GetVariable(&page, "_root.QuestJournalFader.Menu_mc.SystemFader.Page_mc")) {

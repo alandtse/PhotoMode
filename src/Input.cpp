@@ -177,12 +177,12 @@ namespace Input
 			static auto gamepadDown = getKey("WorldZDown", RE::INPUT_DEVICE::kGamepad);
 
 			if (a_key == mouseUp || a_key == gamepadUp) {
-				bool released = !(a_buttonEvent->value != 0.0 || a_buttonEvent->heldDownSecs < 0.0);
+				bool released = !(a_buttonEvent->Value() != 0.0 || a_buttonEvent->HeldDuration() < 0.0);
 				freeCameraState->verticalDirection = static_cast<std::uint16_t>(!released);
 				return true;
 			}
 			if (a_key == mouseDown || a_key == gamepadDown) {
-				if (a_buttonEvent->value == 0.0 && a_buttonEvent->heldDownSecs >= 0.0) {
+				if (a_buttonEvent->Value() == 0.0 && a_buttonEvent->HeldDuration() >= 0.0) {
 					freeCameraState->verticalDirection = 0;
 				} else {
 					freeCameraState->verticalDirection = -1;
@@ -573,7 +573,7 @@ namespace Input
 
 	EventResult Manager::ProcessEvent(RE::InputEvent* const* a_evn, RE::BSTEventSource<RE::InputEvent*>*)
 	{
-		if (!a_evn || !RE::Main::GetSingleton()->gameActive) {
+		if (!a_evn || !MAIN_DATA(RE::Main::GetSingleton()).gameActive) {
 			return EventResult::kContinue;
 		}
 
@@ -597,30 +597,38 @@ namespace Input
 
 				auto& io = ImGui::GetIO();
 
-				if (lastInputDevice == DEVICE::kNone || inputDevice == DEVICE::kNone || lastInputDevice != inputDevice) {
-					io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
-					io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
+				// Flat screen switches ImGui's nav mode and the game cursor by input device. VR must NOT:
+				// the helper owns VR input and the wand is always the mouse, so flipping to gamepad-nav the
+				// moment a controller button is used (e.g. a tab shortcut) would stop the wand's trigger
+				// clicks from activating widgets. Leave VR in its default mouse mode.
+				if (!REL::Module::IsVR()) {
+					if (lastInputDevice == DEVICE::kNone || inputDevice == DEVICE::kNone || lastInputDevice != inputDevice) {
+						io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
+						io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
 
-					if (IsInputGamepad()) {
-						io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-						io.ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;  // unused flag to force ImGui to update gamepad input from backend
-					} else {
-						if (IsInputKBM() && !DoNavigateWithMouse()) {
-							io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+						if (IsInputGamepad()) {
+							io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+							io.ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;  // unused flag to force ImGui to update gamepad input from backend
+						} else {
+							if (IsInputKBM() && !DoNavigateWithMouse()) {
+								io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+							}
 						}
 					}
 				}
 
 				bool canNavigateWithMouse = CanNavigateWithMouse();
 
-				if (canNavigateWithMouse && (!cursorInit || (!cursorMenuOpen && !panCamera))) {
-					ToggleCursor(true);
-					cursorInit = true;
-					MANAGER(PhotoMode)->UpdateKeyboardFocus();
-				} else if (IsInputGamepad() && (cursorInit || cursorMenuOpen)) {
-					ToggleCursor(false);
-					cursorInit = false;
-					MANAGER(PhotoMode)->UpdateKeyboardFocus();
+				if (!REL::Module::IsVR()) {
+					if (canNavigateWithMouse && (!cursorInit || (!cursorMenuOpen && !panCamera))) {
+						ToggleCursor(true);
+						cursorInit = true;
+						MANAGER(PhotoMode)->UpdateKeyboardFocus();
+					} else if (IsInputGamepad() && (cursorInit || cursorMenuOpen)) {
+						ToggleCursor(false);
+						cursorInit = false;
+						MANAGER(PhotoMode)->UpdateKeyboardFocus();
+					}
 				}
 
 				// process inputs
@@ -665,7 +673,7 @@ namespace Input
 							} else if (hotKey == hotKeys->PreviousTabKey() && buttonEvent->IsDown()) {
 								photoMode->NavigateTab(true);
 							} else if (hotKey == hotKeys->FreezeTimeKey() && buttonEvent->IsDown()) {
-								RE::Main::GetSingleton()->freezeTime = !RE::Main::GetSingleton()->freezeTime;
+								photoMode->SetTimeFrozen(!photoMode->IsTimeFrozen());
 							} else if (hotKey == hotKeys->ResetKey()) {
 								if (buttonEvent->IsUp()) {
 									photoMode->Revert(false);

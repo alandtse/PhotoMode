@@ -3,13 +3,17 @@
   "modName": "PhotoMode",
   "displayName": "$PM_Title_MCM",
   "minMcmVersion": 13,
-  "pluginRequirements": [ "PhotoMode.esp" ],
+  "pluginRequirements": ["PhotoMode.esp"],
   "cursorFillMode": "topToBottom",
   "pages": [
     {
       "pageDisplayName": "$PM_Controls_Page",
       "cursorFillMode": "topToBottom",
       "content": [
+        {
+          "text": "$PM_VR_ControlsNote",
+          "type": "header"
+        },
         {
           "text": "$PM_OpenPhotoMode_Header",
           "type": "header"
@@ -208,7 +212,7 @@
           "text": "$PM_ControllerButtonScheme_Text",
           "type": "enum",
           "valueOptions": {
-            "options": [ "$PM_AUTODETECT", "$PM_XBOX", "$PM_PLAYSTATION" ],
+            "options": ["$PM_AUTODETECT", "$PM_XBOX", "$PM_PLAYSTATION"],
             "sourceType": "ModSettingInt"
           }
         }
@@ -379,6 +383,19 @@
             "max": 100,
             "step": 1,
             "formatString": "{0} %",
+            "sourceType": "ModSettingInt"
+          }
+        },
+        {
+          "id": "iDebugLoadScreen:LoadScreen",
+          "text": "$PM_LoadScreenDebug_Text",
+          "type": "slider",
+          "help": "$PM_LoadScreenDebug_Help",
+          "groupCondition": 1,
+          "valueOptions": {
+            "min": 0,
+            "max": 2,
+            "step": 1,
             "sourceType": "ModSettingInt"
           }
         }

@@ -1,4 +1,4 @@
-Scriptname PhotoMode_DEBUG_ToggleMenu extends activemagiceffect  
+Scriptname PhotoMode_DEBUG_ToggleMenu extends activemagiceffect
 {Opens or closes the photo mode menu, with extra debug information. Meant for debugging.}
 
 Bool Property bOpenMenu = True Auto
@@ -9,7 +9,7 @@ Import po3_photomode
 Event OnEffectStart(Actor a_kTarget, Actor a_kCaster)
 
     bool bPhotoModeOpen = IsPhotoModeActive()
-    If (bPhotoModeOpen && bOpenMenu) 
+    If (bPhotoModeOpen && bOpenMenu)
 
         Debug.Messagebox("Photo mode already open, aborting.")
         Return
@@ -18,7 +18,7 @@ Event OnEffectStart(Actor a_kTarget, Actor a_kCaster)
     If (!bPhotoModeOpen && !bOpenMenu)
 
         Debug.Messagebox("Photo mode already closed, aborting.")
-        Return 
+        Return
     EndIf
 
     TogglePhotoMode(bOpenMenu)

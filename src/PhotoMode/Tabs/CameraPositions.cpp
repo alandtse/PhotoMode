@@ -74,6 +74,24 @@ namespace PhotoMode
 			return Result<void>::Error("Failed to apply camera position: PlayerCamera singleton is null");
 		}
 
+		// VR: restore the play-space (PlayerWorldNode) transform only; flat falls through to
+		// FreeCameraState. The node transform alone defines the view (it's relative to the frozen
+		// player), so DON'T also SetPosition the player — that compounds with the node restore and
+		// teleports the user (badly in exteriors). Camera positions are angles of the current scene.
+		if (REL::Module::IsVR()) {
+			const auto player = RE::PlayerCharacter::GetSingleton();
+			const auto vrNodes = player ? player->GetVRNodeData() : nullptr;
+			const auto node = vrNodes ? vrNodes->PlayerWorldNode.get() : nullptr;
+			if (!node) {
+				return Result<void>::Error("Failed to apply camera position: no VR play-space node");
+			}
+			node->local.translate = position;
+			node->local.rotate = playSpaceRotation;
+			RE::NiUpdateData updateData{};
+			node->Update(updateData);
+			return Result<void>::Ok();
+		}
+
 		if (!pcCamera->IsInFreeCameraMode()) {
 			pcCamera->ToggleFreeCameraMode(false);
 		}
@@ -88,7 +106,7 @@ namespace PhotoMode
 					freeCameraState->rotation.y = freeCameraRotation.y;
 				}
 
-				pcCamera->worldFOV = fov;
+				CAMERA_DATA(pcCamera).worldFOV = fov;
 				MANAGER(PhotoMode)->SetViewRoll(viewRoll);
 
 				auto pcCell = RE::TESForm::LookupByID<RE::TESObjectCELL>(cell.GetNumericID());
@@ -322,6 +340,22 @@ namespace PhotoMode
 
 		CameraPosition position;
 
+		// VR has no usable FreeCameraState; the "camera" is the play space (PlayerWorldNode), so
+		// capture its transform instead.
+		if (REL::Module::IsVR()) {
+			const auto player = RE::PlayerCharacter::GetSingleton();
+			const auto vrNodes = player ? player->GetVRNodeData() : nullptr;
+			if (const auto node = vrNodes ? vrNodes->PlayerWorldNode.get() : nullptr) {
+				position.position = node->local.translate;
+				position.playSpaceRotation = node->local.rotate;
+			}
+			// Player transform restore is intentionally unsupported in VR ApplyToCamera() (restoring the
+			// play-space node alone already defines the view; also repositioning the player would compound
+			// with it), so don't bother capturing playerPos/playerRot/cell here -- savePlayerTransform still
+			// applies to the flat-screen path below.
+			return position;
+		}
+
 		const auto currentState = pcCamera->currentState;
 		if (!currentState || currentState->id != RE::CameraState::kFree) {
 			// Return empty position if not in free camera mode
@@ -336,7 +370,7 @@ namespace PhotoMode
 			position.freeCameraRotation.y = freeCameraState->rotation.y;
 		}
 
-		position.fov = pcCamera->worldFOV;
+		position.fov = CAMERA_DATA(pcCamera).worldFOV;
 		position.viewRoll = MANAGER(PhotoMode)->GetViewRoll();
 
 		if (savePlayerTransform) {

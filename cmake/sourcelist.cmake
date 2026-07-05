@@ -8,12 +8,14 @@ set(sources ${sources}
 	src/ImGui/Renderer.cpp
 	src/ImGui/Styles.cpp
 	src/ImGui/Util.cpp
+	src/ImGui/VRHelper.cpp
 	src/ImGui/Widgets.cpp
 	src/Input.cpp
 	src/PCH.cpp
 	src/Papyrus.cpp
 	src/PhotoMode/Hotkeys.cpp
 	src/PhotoMode/Manager.cpp
+	src/PhotoMode/PlayerClone.cpp
 	src/PhotoMode/Tabs/Camera.cpp
 	src/PhotoMode/Tabs/CameraPositions.cpp
 	src/PhotoMode/Tabs/Character.cpp

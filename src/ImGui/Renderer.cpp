@@ -1,6 +1,7 @@
 #include "Renderer.h"
 #include "IconsFonts.h"
 #include "Styles.h"
+#include "VRHelper.h"
 
 #include "PhotoMode/Manager.h"
 
@@ -39,7 +40,7 @@ namespace ImGui::Renderer
 			func();
 
 			if (const auto renderer = RE::BSGraphics::Renderer::GetSingleton()) {
-				const auto swapChain = reinterpret_cast<IDXGISwapChain*>(renderer->data.renderWindows[0].swapChain);
+				const auto swapChain = reinterpret_cast<IDXGISwapChain*>(RENDERER_DATA(renderer).renderWindows[0].swapChain);
 				if (!swapChain) {
 					logger::error("couldn't find swapChain");
 					return;
@@ -51,8 +52,8 @@ namespace ImGui::Renderer
 					return;
 				}
 
-				const auto device = reinterpret_cast<ID3D11Device*>(renderer->data.forwarder);
-				const auto context = reinterpret_cast<ID3D11DeviceContext*>(renderer->data.context);
+				const auto device = reinterpret_cast<ID3D11Device*>(RENDERER_DATA(renderer).forwarder);
+				const auto context = reinterpret_cast<ID3D11DeviceContext*>(RENDERER_DATA(renderer).context);
 
 				logger::info("Initializing ImGui..."sv);
 
@@ -90,6 +91,47 @@ namespace ImGui::Renderer
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	// Build one ImGui frame at the game's real resolution and present it (to the VR helper when
+	// connected, else the desktop swapchain). a_draw fills the frame.
+	template <class F>
+	static void RenderImGuiFrame(F&& a_draw)
+	{
+		ImGui_ImplDX11_NewFrame();
+		SKSE::ImGui_ImplWin32_NewFrame();
+		{
+			// trick imgui into rendering at game's real resolution (ie. if upscaled with Display Tweaks)
+			static const auto screenSize = RE::BSGraphics::Renderer::GetScreenSize();
+
+			auto& io = ImGui::GetIO();
+			io.DisplaySize.x = static_cast<float>(screenSize.width);
+			io.DisplaySize.y = static_cast<float>(screenSize.height);
+
+			// When presenting to the helper's VR panel the canvas must match the panel's
+			// exact pixel size (see VR::PanelSize): a game-resolution canvas on a
+			// 1920x1080 panel shrinks the menu toward the top-left while the wand
+			// hit-test spans the full panel, skewing clicks toward bottom-right.
+			if (const auto panel = VR::PanelSize(); panel.x > 0.0f && panel.y > 0.0f) {
+				io.DisplaySize = panel;
+				io.DisplayFramebufferScale = { 1.0f, 1.0f };
+			}
+		}
+		ImGui::NewFrame();
+		{
+			// disable windowing
+			GImGui->NavWindowingTarget = nullptr;
+
+			a_draw();
+		}
+		// The helper composites its own wand cursor marker over the panel; suppress
+		// ImGui's software cursor so a second (tiny) pointer isn't drawn under it.
+		if (REL::Module::IsVR()) {
+			ImGui::GetIO().MouseDrawCursor = false;
+		}
+		ImGui::EndFrame();
+		ImGui::Render();
+		VR::RenderFrame();
+	}
+
 	// IMenu::PostDisplay
 	struct PostDisplay
 	{
@@ -100,8 +142,13 @@ namespace ImGui::Renderer
 				return func(a_menu);
 			}
 
-			const auto photoMode = MANAGER(PhotoMode);
+			// VR renders + pumps input from the always-firing StopTimer hook instead: this HUD
+			// hook stops firing once time is frozen, which would freeze/hide the panel.
+			if (REL::Module::IsVR()) {
+				return func(a_menu);
+			}
 
+			const auto photoMode = MANAGER(PhotoMode);
 			if (!photoMode->IsActive() || !photoMode->OnFrameUpdate()) {
 				return func(a_menu);
 			}
@@ -109,26 +156,7 @@ namespace ImGui::Renderer
 			// refresh style
 			ImGui::Styles::GetSingleton()->OnStyleRefresh();
 
-			ImGui_ImplDX11_NewFrame();
-			SKSE::ImGui_ImplWin32_NewFrame();
-			{
-				// trick imgui into rendering at game's real resolution (ie. if upscaled with Display Tweaks)
-				static const auto screenSize = RE::BSGraphics::Renderer::GetScreenSize();
-
-				auto& io = ImGui::GetIO();
-				io.DisplaySize.x = static_cast<float>(screenSize.width);
-				io.DisplaySize.y = static_cast<float>(screenSize.height);
-			}
-			ImGui::NewFrame();
-			{
-				// disable windowing
-				GImGui->NavWindowingTarget = nullptr;
-
-				photoMode->Draw();
-			}
-			ImGui::EndFrame();
-			ImGui::Render();
-			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+			RenderImGuiFrame([&] { photoMode->Draw(); });
 
 			return func(a_menu);
 		}
@@ -148,30 +176,49 @@ namespace ImGui::Renderer
 			}
 
 			const auto photoMode = MANAGER(PhotoMode);
-			if (!photoMode->IsActive() || !photoMode->IsHidden() || !photoMode->HasOverlay()) {
+
+			if (REL::Module::IsVR()) {
+				// Drive enter/exit from this always-rendered hook and bypass the menu-open validity
+				// gate — the helper's focus grant (the user picked PhotoMode in its shell,
+				// necessarily from a paused menu) is deliberate intent.
+				const bool focused = VR::HasFocus();
+				if (focused && !photoMode->IsActive()) {
+					if (const auto pc = RE::PlayerCharacter::GetSingleton(); pc && pc->Is3DLoaded()) {
+						photoMode->Activate();
+					}
+				} else if (!focused && photoMode->IsActive()) {
+					photoMode->Deactivate();
+				}
+
+				// Render the MAIN panel here too (PostDisplay stops firing once time is frozen).
+				// Pump laser input every frame; run the per-frame update whenever active (not gated
+				// by hidden — pose/freeze must still tick), then draw + present when it's shown.
+				VR::PumpInput(photoMode->IsActive());
+				if (photoMode->IsActive()) {
+					// Composition aids (grid + overlay frame) live on their own HMD-anchored HUD plane (the
+					// panel is a floating quad that can't frame the shot). Independent of the panel present
+					// below, so draw every active frame — it self-clears when aids are off or UI is hidden.
+					photoMode->DrawVRHud();
+					const bool draw = photoMode->OnFrameUpdate();
+					if (draw && !photoMode->IsHidden()) {
+						ImGui::Styles::GetSingleton()->OnStyleRefresh();
+						RenderImGuiFrame([&] { photoMode->Draw(); });
+						return;  // one ImGui present per frame; overlays are mutually exclusive (panel shown)
+					}
+				}
+			}
+
+			if (!photoMode->IsActive() || !photoMode->IsHidden()) {
 				return;
 			}
-
-			ImGui_ImplDX11_NewFrame();
-			SKSE::ImGui_ImplWin32_NewFrame();
-			{
-				// trick imgui into rendering at game's real resolution (ie. if upscaled with Display Tweaks)
-				static const auto screenSize = RE::BSGraphics::Renderer::GetScreenSize();
-
-				auto& io = ImGui::GetIO();
-				io.DisplaySize.x = static_cast<float>(screenSize.width);
-				io.DisplaySize.y = static_cast<float>(screenSize.height);
+			if (photoMode->HasOverlay()) {
+				RenderImGuiFrame([&] { photoMode->DrawOverlays(); });
+			} else if (REL::Module::IsVR()) {
+				// Hidden with nothing to draw: render an empty frame so the VR panel blits fully
+				// transparent (clear color alpha 0) and actually disappears, instead of freezing the
+				// last menu image on the overlay.
+				RenderImGuiFrame([] {});
 			}
-			ImGui::NewFrame();
-			{
-				// disable windowing
-				GImGui->NavWindowingTarget = nullptr;
-
-				photoMode->DrawOverlays();
-			}
-			ImGui::EndFrame();
-			ImGui::Render();
-			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -181,7 +228,7 @@ namespace ImGui::Renderer
 		REL::Relocation<std::uintptr_t> target{ RELOCATION_ID(75595, 77226), OFFSET(0x9, 0x275) };  // BSGraphics::InitD3D
 		stl::write_thunk_call<CreateD3DAndSwapChain>(target.address());
 
-		REL::Relocation<std::uintptr_t> target2{ RELOCATION_ID(75461, 77246), 0x9 };  // BSGraphics::Renderer::End
+		REL::Relocation<std::uintptr_t> target2{ RELOCATION_ID(75461, 77246), OFFSET_3(0x9, 0x9, 0x15) };  // BSGraphics::Renderer::End
 		stl::write_thunk_call<StopTimer>(target2.address());
 
 		stl::write_vfunc<RE::HUDMenu, PostDisplay>();

@@ -7,17 +7,23 @@
   "dependencies": [
     "boost-unordered",
     "clib-util",
+    "directxmath",
     "directxtex",
+    "directxtk",
     "freetype",
     {
       "name": "imgui",
-      "features": [ "dx11-binding", "win32-binding", "freetype", "wchar32" ]
+      "features": ["dx11-binding", "win32-binding", "freetype", "wchar32"]
     },
     "glaze",
+    "nlohmann-json",
+    "rapidcsv",
     "rapidfuzz",
     "rsm-binary-io",
+    "simpleini",
     "spdlog",
     "srell",
+    "toml11",
     "xbyak"
   ],
   "builtin-baseline": "14bb451131ccf6be50a63a8d9dfe7980e46b5958"

@@ -6,7 +6,7 @@ namespace PhotoMode
 {
 	void Camera::OriginalState::Get()
 	{
-		fov = RE::PlayerCamera::GetSingleton()->worldFOV;
+		fov = CAMERA_DATA(RE::PlayerCamera::GetSingleton()).worldFOV;
 		translateSpeed = FreeCamera::translateSpeed;
 
 		vanillaDOF.blurMultiplier = DOF::blurMultiplier;
@@ -18,7 +18,7 @@ namespace PhotoMode
 
 	void Camera::OriginalState::Revert(bool a_deactivate) const
 	{
-		RE::PlayerCamera::GetSingleton()->worldFOV = fov;
+		CAMERA_DATA(RE::PlayerCamera::GetSingleton()).worldFOV = fov;
 
 		DOF::blurMultiplier = vanillaDOF.blurMultiplier;
 		DOF::nearDist = vanillaDOF.nearDist;
@@ -46,9 +46,17 @@ namespace PhotoMode
 		// revert grid
 		CameraGrid::gridType = CameraGrid::GridType::kDisabled;
 
-		// revert DOF
-		if (const auto& effect = RE::ImageSpaceManager::GetSingleton()->effects[RE::ImageSpaceManager::ImageSpaceEffectEnum::DepthOfField]) {
-			static_cast<RE::ImageSpaceEffectDepthOfField*>(effect)->enabled = true;
+		// revert DOF. The effect enum is an SE-ordered index, but VR orders its effects array
+		// differently, so indexing with the raw enum reads a garbage pointer in VR (CTD on exit).
+		// Map to the runtime-correct slot and skip entirely if this runtime lacks the effect.
+		using ISM = RE::ImageSpaceManager;
+		if (ISM::SupportsCurrentRuntime(ISM::ImageSpaceEffectEnum::DepthOfField)) {
+			if (const auto ism = ISM::GetSingleton()) {
+				const auto index = ISM::GetCurrentIndex(ISM::ImageSpaceEffectEnum::DepthOfField);
+				if (const auto effect = ism->effects[index]) {
+					static_cast<RE::ImageSpaceEffectDepthOfField*>(effect)->enabled = true;
+				}
+			}
 		}
 	}
 
@@ -56,11 +64,15 @@ namespace PhotoMode
 	{
 		ImGui::EnumSlider("$PM_Grid"_T, &CameraGrid::gridType, CameraGrid::gridTypes);
 
-		ImGui::Slider("$PM_FieldOfView"_T, &RE::PlayerCamera::GetSingleton()->worldFOV, 5.0f, 150.0f);
+		// FOV and view-roll are driven by the headset in VR (the HMD owns projection and orientation);
+		// exposing them does nothing useful and fights the stereo render, so hide them there.
+		if (!REL::Module::IsVR()) {
+			ImGui::Slider("$PM_FieldOfView"_T, &CAMERA_DATA(RE::PlayerCamera::GetSingleton()).worldFOV, 5.0f, 150.0f);
 
-		currentViewRollDegrees = RE::rad_to_deg(currentViewRoll);
-		if (ImGui::Slider("$PM_ViewRoll"_T, &currentViewRollDegrees, -90.0f, 90.0f)) {
-			currentViewRoll = RE::deg_to_rad(currentViewRollDegrees);
+			currentViewRollDegrees = RE::rad_to_deg(currentViewRoll);
+			if (ImGui::Slider("$PM_ViewRoll"_T, &currentViewRollDegrees, -90.0f, 90.0f)) {
+				currentViewRoll = RE::deg_to_rad(currentViewRollDegrees);
+			}
 		}
 
 		ImGui::Slider("$PM_TranslateSpeed"_T,
@@ -73,7 +85,7 @@ namespace PhotoMode
 
 			ImGui::CheckBox("$PM_DepthOfField"_T, &curDOF.enabled);
 
-		else 
+		else
 
 		const auto& effect = RE::ImageSpaceManager::GetSingleton()->effects[RE::ImageSpaceManager::ImageSpaceEffectEnum::DepthOfField];
 

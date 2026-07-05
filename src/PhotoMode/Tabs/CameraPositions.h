@@ -55,6 +55,7 @@ namespace PhotoMode
 		float                 fov{ 75.0f };
 		float                 viewRoll{ 0.0f };
 		RE::NiPoint2          freeCameraRotation{};
+		RE::NiMatrix3         playSpaceRotation{};  // VR: PlayerWorldNode orientation (flat uses freeCameraRotation)
 		RE::NiPoint3          playerPos{};
 		RE::NiPoint3          playerRot{};
 		RE::BGSNumericIDIndex cell{};
@@ -141,6 +142,7 @@ struct glz::meta<PhotoMode::CameraPosition>
 		"fov", &T::fov,
 		"viewRoll", &T::viewRoll,
 		"rotation", &T::freeCameraRotation,
+		"playSpaceRotation", &T::playSpaceRotation,
 		"pcPosition", &T::playerPos,
 		"pcRotation", &T::playerRot,
 		"pcCell", &T::cell);

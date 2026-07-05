@@ -111,7 +111,11 @@ namespace ImGui
 
 		GetCurrentWindow()->DrawList->AddImage((ImU64)texID, pos, pos + texture_size, ImVec2(0, 0), ImVec2(1, 1), colour);
 
-		return MANAGER(Input)->CanNavigateWithMouse() ? IsMouseHoveringRect(pos, pos + texture_size) && IsMouseClicked(0) && (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) == 0 : false;
+		// VR drives the wand as a mouse cursor (the helper sets MousePos + trigger=left-click) but isn't
+		// classified as KBM, so CanNavigateWithMouse() is false. Without treating VR as mouse-driven here
+		// the arrow-cycle widgets (EnumSlider) can never be clicked in-headset.
+		const bool mouseDriven = MANAGER(Input)->CanNavigateWithMouse() || REL::Module::IsVR();
+		return mouseDriven ? IsMouseHoveringRect(pos, pos + texture_size) && IsMouseClicked(0) && (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) == 0 : false;
 	}
 
 	bool IsWidgetFocused()
@@ -127,13 +131,30 @@ namespace ImGui
 
 	bool IsWidgetFocused(ImGuiID id)
 	{
-		bool navigateWithMouse = MANAGER(Input)->CanNavigateWithMouse();
+		// VR's wand acts as a mouse cursor but isn't classified KBM, so without this override every
+		// caller here falls to focus-based (NavId) detection -- and VR's NavId shifts far more than a
+		// real mouse/gamepad's ever would (noisy wand input), which read as this widget's hover/focus
+		// state flickering on and off. Same fix already applied ad hoc to CheckBox; this is the shared
+		// utility several other widgets call directly, so it needs it too.
+		bool navigateWithMouse = MANAGER(Input)->CanNavigateWithMouse() || REL::Module::IsVR();
 		return (navigateWithMouse ? GetHoveredID() == id : GetFocusID() == id) &&
 		       (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) == 0;
 	}
 
 	bool ActivateOnHover()
 	{
+		// Real gamepad nav has no separate "click" gesture -- moving D-pad/stick focus onto a widget
+		// is the only way to reach it, so focus alone must activate it. VR isn't that: the wand can
+		// rest its cursor/focus on anything just by pointing, and selection is a genuine trigger click
+		// (per !CanNavigateWithMouse(), VR was falling into this same gamepad-style path though, so any
+		// widget that happened to hold nav focus got auto-activated every single frame it was focused
+		// and not yet active -- and since nothing about "focused" requires a fresh edge, this fired
+		// continuously, immediately re-activating a widget the instant something else (e.g. the
+		// helper's stuck-ActiveId watchdog) deactivated it. Read as a widget's hover/active highlight
+		// flickering nonstop while the user did nothing but hold the wand still over it.
+		if (REL::Module::IsVR()) {
+			return false;
+		}
 		if (MANAGER(Input)->IsInputGamepad() || !MANAGER(Input)->CanNavigateWithMouse()) {
 			if (!IsItemActive()) {
 				if (IsItemFocused()) {
